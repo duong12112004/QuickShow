@@ -1,6 +1,7 @@
 import axios from "axios";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
+import { inngest } from "../inngest/index.js";
 
 //API to get now playing movies from TMDB API
 export const getNowPlayingMovies = async (req, res) => {
@@ -77,6 +78,12 @@ export const addShow = async (req, res) => {
             await Show.insertMany(showsToCreate);
         }
 
+        // Trigger Inngest event
+        await inngest.send({
+            name: "app/show.added",
+            data: { movieTitle: movie.title }
+        })
+
         res.json({ success: true, message: "Show added successfully" });
     } catch (error) {
         // Xử lý lỗi ở đây
@@ -113,9 +120,9 @@ export const getShow = async (req, res) => {
         const { movieId } = req.params;
 
         // Get all upcoming shows for the movie
-        const shows = await Show.find({ 
+        const shows = await Show.find({
             movie: movieId,
-            showDateTime: { $gte: new Date() } 
+            showDateTime: { $gte: new Date() }
         });
 
         const movie = await Movie.findById(movieId);
@@ -127,9 +134,9 @@ export const getShow = async (req, res) => {
             if (!dateTime[date]) {
                 dateTime[date] = [];
             }
-            dateTime[date].push({ 
-                time: show.showDateTime, 
-                showId: show._id 
+            dateTime[date].push({
+                time: show.showDateTime,
+                showId: show._id
             });
         });
 
