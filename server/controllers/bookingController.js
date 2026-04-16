@@ -13,7 +13,9 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
 
         const occupiedSeats = showData.occupiedSeats;
 
-        const isAnySeatTaken = selectedSeats.some(seat => occupiedSeats[seat]);
+        const isAnySeatTaken = selectedSeats.some(seat => 
+            showData.occupiedSeats[seat] || showData.heldSeats[seat]
+        );
 
         return !isAnySeatTaken;
     } catch (error) {
@@ -22,49 +24,65 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
     }
 };
 
+// Thay thế hàm createBooking trong bookingController.js
 export const createBooking = async (req, res) => {
     try {
         const { userId } = req.auth();
         const { showId, selectedSeats } = req.body;
         const { origin } = req.headers;
 
-        // Kiểm tra xem chỗ ngồi có còn trống cho buổi chiếu phim đã chọn hay không.
         const isAvailable = await checkSeatsAvailability(showId, selectedSeats);
-
         if (!isAvailable) {
             return res.json({ success: false, message: "Selected Seats are not available." });
         }
 
-        // Get the show details
-        const showData = await Show.findById(showId).populate('movie');
+        // Lấy thông tin suất chiếu kèm theo Phòng và Phim
+        const showData = await Show.findById(showId).populate('movie').populate('room');
+        if (!showData || !showData.room) {
+            return res.json({ success: false, message: "Lỗi dữ liệu suất chiếu hoặc phòng." });
+        }
 
-        // Create a new booking
+        // --- BACKEND TỰ TÍNH TIỀN ĐỂ CHỐNG HACK ---
+        const seatMap = showData.room.seatMap;
+        const basePrice = showData.basePrice;
+        let totalAmount = 0;
+
+        selectedSeats.forEach(seatNum => {
+            let seatType = 'STANDARD';
+            seatMap.forEach(row => {
+                row.seats.forEach(s => {
+                    if (s.seatNumber === seatNum) seatType = s.seatType;
+                });
+            });
+
+            if (seatType === 'VIP') totalAmount += (basePrice + 20000);
+            else if (seatType === 'COUPLE') totalAmount += (basePrice * 2);
+            else totalAmount += basePrice;
+        });
+
+        // Tạo hóa đơn mới
         const booking = await Booking.create({
             user: userId,
             show: showId,
-            amount: showData.showPrice * selectedSeats.length,
+            roomName: showData.room.name, // Lưu tên phòng vào hóa đơn
+            amount: totalAmount, // Lưu tổng tiền đã tính
             bookedSeats: selectedSeats
         });
 
-        // Update occupied seats
-        selectedSeats.map((seat) => {
-            showData.occupiedSeats[seat] = userId;
+        // Cập nhật ghế đang đặt
+        selectedSeats.forEach((seat) => {
+            showData.heldSeats[seat] = userId; // Đưa vào hàng chờ
         });
-
-        showData.markModified('occupiedSeats');
+        showData.markModified('heldSeats');
         await showData.save();
 
-        // Stripe Gateway Initialize
+        // --- CẤU HÌNH STRIPE ---
         const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY)
-
-        // Creating line items for Stripe
         const line_items = [{
             price_data: {
-                currency: 'usd',
-                product_data: {
-                    name: showData.movie.title
-                },
-                unit_amount: Math.floor(booking.amount) * 100
+                currency: 'vnd', // LƯU Ý: Nếu dùng tiền Việt, bạn nên để là 'vnd', còn 'usd' thì chia tỷ giá
+                product_data: { name: showData.movie.title },
+                unit_amount: Math.floor(booking.amount) // Stripe VND không cần nhân 100
             },
             quantity: 1
         }]
@@ -74,21 +92,16 @@ export const createBooking = async (req, res) => {
             cancel_url: `${origin}/my-bookings`,
             line_items: line_items,
             mode: 'payment',
-            metadata: {
-                bookingId: booking._id.toString()
-            },
-            expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // Expires in 30 minutes
+            metadata: { bookingId: booking._id.toString() },
+            expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
         })
 
         booking.paymentLink = session.url
         await booking.save()
 
-        // Run Inngest Scheduler Function to check payment status after 10 minutes
         await inngest.send({
             name: "app/checkpayment",
-            data: {
-                bookingId: booking._id.toString()
-            }
+            data: { bookingId: booking._id.toString() }
         });
 
         res.json({ success: true, url: session.url });
@@ -98,7 +111,6 @@ export const createBooking = async (req, res) => {
         res.json({ success: false, message: error.message });
     }
 };
-
 export const getOccupiedSeats = async (req, res) => {
     try {
         const { showId } = req.params;

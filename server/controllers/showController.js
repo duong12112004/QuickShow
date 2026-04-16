@@ -1,33 +1,36 @@
 import axios from "axios";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
+import Room from "../models/Room.js"; 
 import { inngest } from "../inngest/index.js";
 
-//API to get now playing movies from TMDB API
+// 1. API lấy danh sách phim đang chiếu từ TMDB
 export const getNowPlayingMovies = async (req, res) => {
     try {
         const { data } = await axios.get('https://api.themoviedb.org/3/movie/now_playing', {
             headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
         });
-
-        const movies = data.results;
-        res.json({ success: true, movies: movies });
+        res.json({ success: true, movies: data.results });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
     }
 };
 
-// API to add a new show to the database
-
+// 2. API THÊM SUẤT CHIẾU (ĐÃ NÂNG CẤP STAGE 1)
 export const addShow = async (req, res) => {
     try {
-        const { movieId, showsInput, showPrice } = req.body;
+        // Nhận thêm roomId và basePrice thay vì showPrice
+        const { movieId, roomId, showsInput, basePrice } = req.body;
+
+        // Kiểm tra xem phòng chiếu có thật không
+        const roomExists = await Room.findById(roomId);
+        if (!roomExists) {
+            return res.json({ success: false, message: "Phòng chiếu không tồn tại trong hệ thống!" });
+        }
 
         let movie = await Movie.findById(movieId);
-
         if (!movie) {
-            // Fetch movie details and credits from TMDB API
             const [movieDetailsResponse, movieCreditsResponse] = await Promise.all([
                 axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
                     headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
@@ -40,7 +43,7 @@ export const addShow = async (req, res) => {
             const movieApiData = movieDetailsResponse.data;
             const movieCreditsData = movieCreditsResponse.data;
 
-            const movieDetails = {
+            movie = await Movie.create({
                 _id: movieId,
                 title: movieApiData.title,
                 overview: movieApiData.overview,
@@ -53,10 +56,7 @@ export const addShow = async (req, res) => {
                 tagline: movieApiData.tagline || "",
                 vote_average: movieApiData.vote_average,
                 runtime: movieApiData.runtime
-            };
-
-            // Add movie to database
-            movie = await Movie.create(movieDetails);
+            });
         }
 
         const showsToCreate = [];
@@ -67,8 +67,9 @@ export const addShow = async (req, res) => {
                 const dateTimeString = `${showDate}T${time}`;
                 showsToCreate.push({
                     movie: movieId,
+                    room: roomId, // Gắn suất chiếu vào đúng phòng
                     showDateTime: new Date(dateTimeString),
-                    showPrice,
+                    basePrice: basePrice, // Dùng giá gốc
                     occupiedSeats: {}
                 });
             });
@@ -78,72 +79,92 @@ export const addShow = async (req, res) => {
             await Show.insertMany(showsToCreate);
         }
 
-        // Trigger Inngest event
         await inngest.send({
             name: "app/show.added",
             data: { movieTitle: movie.title }
-        })
+        });
 
-        res.json({ success: true, message: "Show added successfully" });
+        res.json({ success: true, message: "Thêm suất chiếu thành công" });
     } catch (error) {
-        // Xử lý lỗi ở đây
         console.error(error);
         res.json({ success: false, message: error.message });
     }
 };
 
-// API to get all shows from the database
+// 3. API LẤY PHIM ĐANG CHIẾU TRÊN TRANG CHỦ
 export const getShows = async (req, res) => {
     try {
         const shows = await Show.find({ showDateTime: { $gte: new Date() } })
             .populate('movie')
             .sort({ showDateTime: 1 });
 
-        // filter unique shows
         const uniqueMoviesMap = new Map();
         shows.forEach(show => {
             uniqueMoviesMap.set(show.movie._id.toString(), show.movie);
         });
-        const uniqueShows = Array.from(uniqueMoviesMap.values());
-
-        res.json({ success: true, shows: Array.from(uniqueShows) });
+        
+        res.json({ success: true, shows: Array.from(uniqueMoviesMap.values()) });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
     }
 };
 
-// API to get a single show from the database
-
 export const getShow = async (req, res) => {
     try {
         const { movieId } = req.params;
 
-        // Get all upcoming shows for the movie
+        // Chỉ populate 'room', không còn 'theater'
         const shows = await Show.find({
             movie: movieId,
             showDateTime: { $gte: new Date() }
-        });
+        }).populate('room'); 
 
         const movie = await Movie.findById(movieId);
-
         const dateTime = {};
 
         shows.forEach((show) => {
-            const date = show.showDateTime.toISOString().split('T')[0]; // Lấy phần ngày
+            // CÁCH SỬA: Cộng thêm 7 tiếng (7 * 60 * 60 * 1000 ms) để bù múi giờ Việt Nam (UTC+7)
+            const vnTime = new Date(show.showDateTime.getTime() + (7 * 60 * 60 * 1000));
+            const date = vnTime.toISOString().split('T')[0]; 
+            
             if (!dateTime[date]) {
                 dateTime[date] = [];
             }
             dateTime[date].push({
-                time: show.showDateTime,
-                showId: show._id
+                time: show.showDateTime, // Giữ nguyên time gốc để Frontend tự hiển thị
+                showId: show._id,
+                roomName: show.room?.name || "N/A"
             });
         });
 
         res.json({ success: true, movie, dateTime });
-
     } catch (error) {
-        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+};
+// 5. [TÍNH NĂNG MỚI] API LẤY SƠ ĐỒ GHẾ CHO MÀN HÌNH ĐẶT VÉ
+// API LẤY SƠ ĐỒ GHẾ (ĐÃ LOẠI BỎ THEATER)
+export const getSeatLayoutForShow = async (req, res) => {
+    try {
+        const { showId } = req.params;
+        
+        const show = await Show.findById(showId).populate('room');
+
+        if (!show) return res.json({ success: false, message: "Suất chiếu không tồn tại!" });
+        if (!show.room) return res.json({ success: false, message: "Phòng chiếu không tồn tại!" });
+
+        const occupiedSeatsArray = Object.keys(show.occupiedSeats);
+
+        res.json({
+            success: true,
+            roomName: show.room.name,
+            basePrice: show.basePrice,
+            seatMap: show.room.seatMap, 
+            occupiedSeats: occupiedSeatsArray ,
+            heldSeats: Object.keys(show.heldSeats)
+        });
+    } catch (error) {
         res.json({ success: false, message: error.message });
     }
 };
