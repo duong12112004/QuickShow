@@ -64,7 +64,7 @@ export const addShow = async (req, res) => {
         showsInput.forEach((show) => {
             const showDate = show.date;
             show.time.forEach((time) => {
-                const dateTimeString = `${showDate}T${time}`;
+                const dateTimeString = `${showDate}T${time}+07:00`;
                 showsToCreate.push({
                     movie: movieId,
                     room: roomId, // Gắn suất chiếu vào đúng phòng
@@ -124,15 +124,16 @@ export const getShow = async (req, res) => {
         const dateTime = {};
 
         shows.forEach((show) => {
-            // CÁCH SỬA: Cộng thêm 7 tiếng (7 * 60 * 60 * 1000 ms) để bù múi giờ Việt Nam (UTC+7)
-            const vnTime = new Date(show.showDateTime.getTime() + (7 * 60 * 60 * 1000));
-            const date = vnTime.toISOString().split('T')[0]; 
+            // SỬA TẠI ĐÂY: Dùng hàm chuẩn của Javascript để format ngày theo đúng múi giờ VN (không tự cộng trừ tay)
+            const date = new Date(show.showDateTime).toLocaleDateString('en-CA', { 
+                timeZone: 'Asia/Ho_Chi_Minh' 
+            }); 
             
             if (!dateTime[date]) {
                 dateTime[date] = [];
             }
             dateTime[date].push({
-                time: show.showDateTime, // Giữ nguyên time gốc để Frontend tự hiển thị
+                time: show.showDateTime, 
                 showId: show._id,
                 roomName: show.room?.name || "N/A"
             });
