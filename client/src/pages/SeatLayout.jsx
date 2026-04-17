@@ -7,14 +7,8 @@ import isoTimeFormat from '../lib/isoTimeFormat'
 import toast from 'react-hot-toast'
 import BlurCircle from '../components/BlurCircle'
 import { useAppContext } from '../context/AppContext'
+import { socket } from '../configs/socket';
 
-// --- 1. IMPORT SOCKET.IO ---
-import io from 'socket.io-client'
-
-// Khởi tạo Socket ở ngoài component để không bị re-render nhiều lần
-// (Nếu backend của bạn chạy port khác, hãy sửa lại đường link này)
-const backendUrl = import.meta.env.VITE_BASE_URL; // Lấy link từ Vercel
-const socket = io(backendUrl); 
 
 const SeatLayout = () => {
   const { id, date } = useParams()
@@ -272,12 +266,12 @@ const SeatLayout = () => {
                         disabled={isOccupied || isHeld || isLiveViewing}
                         className={`rounded border cursor-pointer transition-all duration-200 flex items-center justify-center font-medium
                           ${widthClass} ${styleClass}
-                          ${isSelected ? "!bg-primary !text-white !border-primary scale-110" : ""}
-                          ${isOccupied ? "!opacity-30 !cursor-not-allowed !bg-gray-800 !border-gray-600 !text-gray-500" : ""}
-                          ${isHeld ? "!bg-orange-500/60 !border-orange-500 !text-white !cursor-not-allowed animate-pulse" : ""}
+                          ${isSelected ? "bg-primary! text-white! border-primary! scale-110" : ""}
+                          ${isOccupied ? "opacity-30! cursor-not-allowed! bg-gray-800! border-gray-600! text-gray-500!" : ""}
+                          ${isHeld ? "bg-orange-500/60! border-orange-500! text-white! cursor-not-allowed! animate-pulse" : ""}
                           
                           /* Hiệu ứng viền đỏ nhấp nháy khi người khác đang bấm */
-                          ${isLiveViewing ? "!border-red-500 !text-red-500 !bg-red-500/10 !cursor-wait animate-pulse" : ""}
+                          ${isLiveViewing ? "border-red-500! text-red-500! bg-red-500/10! cursor-wait! animate-pulse" : ""}
                         `}
                       >
                         {seat.seatNumber}

@@ -63,24 +63,30 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
           const booking = await Booking.findById(bookingId);
 
           // If payment is not made, release seats and delete booking
-          if(!booking.isPaid) {
-              const show = await Show.findById(booking.show);
-              booking.bookedSeats.forEach((seat) => {
-                  delete show.heldSeats[seat];
-              });
-              show.markModified('heldSeats');
-              await show.save();
+          if(booking && !booking.isPaid) {
+            const validShowId = booking.show._id ? booking.show._id.toString() : booking.show.toString();
+            const show = await Show.findById(validShowId);
 
-              // --- THÊM ĐOẠN NÀY ĐỂ BÁO TÍN HIỆU NHẢ GHẾ ---
-              if (global.io) {
-                // Phát tín hiệu 'seats_released' cho tất cả ai đang trong phòng
-                global.io.to(validShowId).emit('seats_released', booking.bookedSeats);
-                console.log(`[Socket] Đã phát tín hiệu nhả ghế do quá hạn!`);
+            if (show) {
+                booking.bookedSeats.forEach((seat) => {
+                    if (show.heldSeats) {
+                        delete show.heldSeats[seat]; 
+                    }
+                });
+                show.markModified('heldSeats');
+                await show.save();
+
+                // --- THÊM ĐOẠN NÀY ĐỂ BÁO TÍN HIỆU NHẢ GHẾ ---
+                if (global.io) {
+                    // Phát tín hiệu 'seats_released' cho tất cả ai đang trong phòng
+                    global.io.to(validShowId).emit('seats_released', booking.bookedSeats);
+                    console.log(`[Socket] Đã phát tín hiệu nhả ghế do quá hạn!`);
+                }
+                // ---------------------------------------------
             }
-            // ---------------------------------------------
-
-              await Booking.findByIdAndDelete(booking._id);
-          }
+            
+            await Booking.findByIdAndDelete(booking._id);
+        }
       });
   }
 );
