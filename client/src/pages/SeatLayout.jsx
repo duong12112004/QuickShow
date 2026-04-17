@@ -13,7 +13,8 @@ import io from 'socket.io-client'
 
 // Khởi tạo Socket ở ngoài component để không bị re-render nhiều lần
 // (Nếu backend của bạn chạy port khác, hãy sửa lại đường link này)
-const socket = io("http://localhost:3000"); 
+const backendUrl = import.meta.env.VITE_BASE_URL; // Lấy link từ Vercel
+const socket = io(backendUrl); 
 
 const SeatLayout = () => {
   const { id, date } = useParams()
