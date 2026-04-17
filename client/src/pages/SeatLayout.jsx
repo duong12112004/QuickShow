@@ -8,18 +8,27 @@ import toast from 'react-hot-toast'
 import BlurCircle from '../components/BlurCircle'
 import { useAppContext } from '../context/AppContext'
 
+// --- 1. IMPORT SOCKET.IO ---
+import io from 'socket.io-client'
+
+// Khởi tạo Socket ở ngoài component để không bị re-render nhiều lần
+// (Nếu backend của bạn chạy port khác, hãy sửa lại đường link này)
+const socket = io("http://localhost:3000"); 
+
 const SeatLayout = () => {
   const { id, date } = useParams()
   const [selectedSeats, setSelectedSeats] = useState([])
   const [selectedTime, setSelectedTime] = useState(null)
   const [show, setShow] = useState(null)
 
-  // Các State phục vụ Layout động
   const [seatMap, setSeatMap] = useState([])
   const [heldSeats, setHeldSeats] = useState([])
   const [occupiedSeats, setOccupiedSeats] = useState([])
   const [roomData, setRoomData] = useState(null) 
   const [basePrice, setBasePrice] = useState(0)
+
+  // --- 2. THÊM STATE ĐỂ CHỨA GHẾ MÀ NGƯỜI KHÁC ĐANG XEM ---
+  const [liveViewingSeats, setLiveViewingSeats] = useState([])
 
   const { axios, getToken, user } = useAppContext()
 
@@ -30,7 +39,6 @@ const SeatLayout = () => {
     } catch (error) { console.log(error) }
   }
 
-  // Lấy Layout phòng chiếu từ Backend
   const getSeatLayout = async () => {
     try {
       const { data } = await axios.get(`/api/show/${selectedTime.showId}/seat-layout`)
@@ -46,21 +54,97 @@ const SeatLayout = () => {
     } catch (error) { console.log(error) }
   }
 
+  // --- 3. LẮNG NGHE SỰ KIỆN REAL-TIME TỪ SERVER ---
+  useEffect(() => {
+    if (!selectedTime) return;
+
+    // Báo cho Server biết mình đang vào xem suất chiếu này
+    socket.emit('join_show', selectedTime.showId);
+
+    // Lắng nghe có người click chọn ghế
+    const handleUpdateLiveSeats = ({ seatId, action }) => {
+      if (action === 'select') {
+        // Thêm ghế vào danh sách đang bị dòm ngó
+        setLiveViewingSeats(prev => [...new Set([...prev, seatId])]);
+      } else if (action === 'deselect') {
+        // Gỡ ghế ra khỏi danh sách dòm ngó
+        setLiveViewingSeats(prev => prev.filter(s => s !== seatId));
+      }
+    };
+
+    // Lắng nghe có người vừa bấm thanh toán (Khóa cứng ghế màu cam ngay lập tức)
+    const handleLockSeats = (seatsToLock) => {
+      setHeldSeats(prev => [...new Set([...prev, ...seatsToLock])]);
+      setLiveViewingSeats(prev => prev.filter(s => !seatsToLock.includes(s)));
+    };
+
+    // --- 1. BỔ SUNG HÀM NÀY: Xử lý khi có người mua xong ---
+    const handleSeatsBooked = (bookedSeats) => {
+      // Đưa ghế vào danh sách màu xám (Occupied)
+      setOccupiedSeats(prev => [...new Set([...prev, ...bookedSeats])]);
+      // Xóa ghế khỏi danh sách màu cam (Held) và dòm ngó (Viewing)
+      setHeldSeats(prev => prev.filter(s => !bookedSeats.includes(s)));
+      setLiveViewingSeats(prev => prev.filter(s => !bookedSeats.includes(s)));
+    };
+
+    // --- 1. THÊM HÀM XỬ LÝ NHẢ GHẾ ---
+    const handleSeatsReleased = (releasedSeats) => {
+      // Xóa những ghế này khỏi danh sách màu cam (Held)
+      setHeldSeats(prev => prev.filter(s => !releasedSeats.includes(s)));
+    };
+
+    socket.on('update_live_seats', handleUpdateLiveSeats);
+    socket.on('lock_seats_temporarily', handleLockSeats);
+
+    // --- 2. BẬT LẮNG NGHE ---
+    socket.on('seats_booked_successfully', handleSeatsBooked);
+    // --- 2. BẬT LẮNG NGHE LỆNH NHẢ GHẾ ---
+    socket.on('seats_released', handleSeatsReleased);
+
+    return () => {
+      socket.off('update_live_seats', handleUpdateLiveSeats);
+      socket.off('lock_seats_temporarily', handleLockSeats);
+
+      // --- 3. TẮT LẮNG NGHE KHI RỜI TRANG ---
+      socket.off('seats_booked_successfully', handleSeatsBooked);
+      // --- 3. TẮT LẮNG NGHE KHI RỜI TRANG ---
+      socket.off('seats_released', handleSeatsReleased);
+    };
+  }, [selectedTime]);
+
   const handleSeatClick = (seatId) => {
     if (!selectedTime) return toast("Please select time first")
     if (!selectedSeats.includes(seatId) && selectedSeats.length >= 5) {
       return toast("You can only select up to 5 seats")
     }
-    // Khóa không cho chọn nếu ghế đã bán hoặc đang được giữ
-    if (occupiedSeats.includes(seatId) || heldSeats.includes(seatId)) return toast('This seat is unavailable')
+    
+    // Khóa không cho chọn nếu ghế đã bán, đang giữ, hoặc NGƯỜI KHÁC ĐANG CHỌN (live)
+    if (occupiedSeats.includes(seatId) || heldSeats.includes(seatId) || liveViewingSeats.includes(seatId)) {
+        return toast('This seat is currently unavailable')
+    }
 
-    setSelectedSeats(prev => prev.includes(seatId) ? prev.filter(seat => seat !== seatId) : [...prev, seatId])
+    const isSelecting = !selectedSeats.includes(seatId);
+
+    setSelectedSeats(prev => isSelecting ? [...prev, seatId] : prev.filter(seat => seat !== seatId));
+
+    // --- 4. BẮN TÍN HIỆU ĐI KHI MÌNH CLICK GHẾ ---
+    socket.emit('seat_selecting', {
+        showId: selectedTime.showId,
+        seatId: seatId,
+        action: isSelecting ? 'select' : 'deselect'
+    });
   }
 
   const bookTickets = async () => {
     try {
       if (!user) return toast.error('Please login to proceed')
       if (!selectedTime || !selectedSeats.length) return toast.error('Please select a time and seats')
+
+      // --- 5. BẮN TÍN HIỆU KHÓA GHẾ KHI BẤM CHECKOUT ---
+      socket.emit('seat_held_checkout', {
+          showId: selectedTime.showId,
+          selectedSeats: selectedSeats
+      });
 
       const { data } = await axios.post('/api/booking/create', {
         showId: selectedTime.showId,
@@ -77,10 +161,8 @@ const SeatLayout = () => {
     } catch (error) { toast.error(error.message) }
   }
 
-  // Tính tổng tiền dựa trên loại ghế
   const calculateTotalPrice = () => {
     if (!basePrice || selectedSeats.length === 0) return 0;
-
     let total = 0;
     selectedSeats.forEach(seatNum => {
       let sType = 'STANDARD';
@@ -89,7 +171,6 @@ const SeatLayout = () => {
           if (s.seatNumber === seatNum) sType = s.seatType;
         });
       });
-
       if (sType === 'VIP') total += (basePrice + 20000);
       else if (sType === 'COUPLE') total += (basePrice * 2);
       else total += basePrice;
@@ -103,13 +184,14 @@ const SeatLayout = () => {
     if (selectedTime) {
       getSeatLayout()
       setSelectedSeats([]) 
+      setLiveViewingSeats([]) // Reset lại khi chuyển suất chiếu
     }
   }, [selectedTime])
 
   return show ? (
     <div className='flex flex-col md:flex-row px-6 md:px-16 lg:px-40 py-30 md:pt-50'>
       
-      {/* CỘT BÊN TRÁI: Thời gian có sẵn gộp theo Phòng */}
+      {/* Sidebar: Available Timings */}
       <div className='w-64 bg-primary/10 border border-primary/20 rounded-lg py-8 h-max md:sticky md:top-30'>
         <p className='text-lg font-semibold px-6 mb-6'>Available Timings</p>
         <div className='mt-2 space-y-6'>
@@ -121,9 +203,7 @@ const SeatLayout = () => {
               }, {})
           ).map(([roomName, timings]) => (
               <div key={roomName} className='flex flex-col'>
-                  <p className='text-xs font-bold text-gray-500 px-6 mb-2 uppercase tracking-wider'>
-                    {roomName}
-                  </p>
+                  <p className='text-xs font-bold text-gray-500 px-6 mb-2 uppercase tracking-wider'>{roomName}</p>
                   <div className='space-y-1'>
                       {timings.map((item) => (
                           <div 
@@ -143,7 +223,7 @@ const SeatLayout = () => {
         </div>
       </div>
 
-      {/* CỘT BÊN PHẢI: Bố trí chỗ ngồi động */}
+      {/* Main Area: Seat Map */}
       <div className='relative flex-1 flex flex-col items-center max-md:mt-16'>
         <BlurCircle top='-100px' left='-100px' />
         <BlurCircle bottom='0' right='0' />
@@ -157,28 +237,16 @@ const SeatLayout = () => {
         <img src={assets.screenImage} alt="" className='mt-2' />
         <p className='text-gray-400 text-sm mb-6 mt-2 tracking-[0.3em]'>SCREEN</p>
 
-        {/* Ma trận ghế vẽ tự động */}
         <div className='flex flex-col items-center mt-8 text-xs text-gray-300 w-full overflow-x-auto pb-10'>
           {seatMap?.map((rowObj, index) => {
-            
-            // Tạo khoảng trống dọc (Bắt tín hiệu từ Backend)
-            if (rowObj.seats.length === 0) {
-              return <div key={rowObj.row} className="h-3 md:h-6 w-full"></div>; 
-            }
-
+            if (rowObj.seats.length === 0) return <div key={rowObj.row} className="h-3 md:h-6 w-full"></div>; 
             return (
               <div key={rowObj.row} className='flex gap-2 mt-3 items-center justify-center w-full min-w-max'>
-                {/* Tên hàng */}
                 <div className='w-6 text-center font-bold text-gray-500 mr-2 md:mr-4'>{rowObj.row}</div>
-                
                 <div className='flex items-center justify-center gap-2 md:gap-3'>
                   {rowObj.seats.map((seat) => {
-                    // Lối đi ngang
-                    if (seat.seatType === 'EMPTY') {
-                      return <div key={seat.seatNumber} className='w-6 md:w-8 h-8'></div>;
-                    }
+                    if (seat.seatType === 'EMPTY') return <div key={seat.seatNumber} className='w-6 md:w-8 h-8'></div>;
 
-                    // Style mặc định: Màu chữ trắng 
                     let styleClass = 'border-primary/60 hover:bg-primary/20 text-white'; 
                     let widthClass = 'w-8 h-8 md:w-10 md:h-10';
 
@@ -192,17 +260,23 @@ const SeatLayout = () => {
                     const isSelected = selectedSeats.includes(seat.seatNumber);
                     const isOccupied = occupiedSeats.includes(seat.seatNumber);
                     const isHeld = heldSeats.includes(seat.seatNumber);
+                    
+                    // --- 6. KIỂM TRA XEM NGƯỜI KHÁC CÓ ĐANG CHỌN GHẾ NÀY KHÔNG ---
+                    const isLiveViewing = liveViewingSeats.includes(seat.seatNumber);
 
                     return (
                       <button
                         key={seat.seatNumber}
                         onClick={() => handleSeatClick(seat.seatNumber)}
-                        disabled={isOccupied || isHeld}
+                        disabled={isOccupied || isHeld || isLiveViewing}
                         className={`rounded border cursor-pointer transition-all duration-200 flex items-center justify-center font-medium
                           ${widthClass} ${styleClass}
                           ${isSelected ? "!bg-primary !text-white !border-primary scale-110" : ""}
                           ${isOccupied ? "!opacity-30 !cursor-not-allowed !bg-gray-800 !border-gray-600 !text-gray-500" : ""}
                           ${isHeld ? "!bg-orange-500/60 !border-orange-500 !text-white !cursor-not-allowed animate-pulse" : ""}
+                          
+                          /* Hiệu ứng viền đỏ nhấp nháy khi người khác đang bấm */
+                          ${isLiveViewing ? "!border-red-500 !text-red-500 !bg-red-500/10 !cursor-wait animate-pulse" : ""}
                         `}
                       >
                         {seat.seatNumber}
@@ -215,12 +289,16 @@ const SeatLayout = () => {
           })}
         </div>
 
-        {/* Legend (Đã cập nhật Holding màu cam nhấp nháy) */}
+        {/* Legend */}
         {seatMap.length > 0 && (
           <div className='flex flex-wrap gap-4 md:gap-6 mt-10 text-sm text-gray-400 justify-center'>
             <div className='flex items-center gap-2'><div className='w-4 h-4 border border-primary/60 rounded'></div> Standard</div>
             <div className='flex items-center gap-2'><div className='w-4 h-4 border border-yellow-500 rounded'></div> VIP</div>
             <div className='flex items-center gap-2'><div className='w-8 h-4 border border-pink-500 rounded'></div> Couple</div>
+            
+            {/* Thêm chú thích cho ghế đang bị dòm ngó */}
+            <div className='flex items-center gap-2'><div className='w-4 h-4 border border-red-500 bg-red-500/10 rounded animate-pulse'></div> Viewing</div>
+            
             <div className='flex items-center gap-2'><div className='w-4 h-4 bg-orange-500/60 border border-orange-500 rounded animate-pulse'></div> Holding</div>
             <div className='flex items-center gap-2'><div className='w-4 h-4 bg-gray-800 rounded'></div> Booked</div>
           </div>

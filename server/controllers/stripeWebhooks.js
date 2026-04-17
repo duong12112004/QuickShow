@@ -43,6 +43,14 @@ export const stripeWebhooks = async (request, response) => {
                         show.markModified('heldSeats');
                         show.markModified('occupiedSeats');
                         await show.save();
+
+                        // --- THÊM ĐOẠN CODE NÀY VÀO ĐÂY ---
+                        // Mượn cái loa Socket từ app để thông báo cho những ai đang ở trong phòng này
+                        const io = request.app.get('io');
+                        if (io) {
+                            io.to(booking.show.toString()).emit('seats_booked_successfully', booking.bookedSeats);
+                            console.log(`[Socket] Đã phát tín hiệu chốt vé cho suất: ${booking.show}`);
+                        }
                     }
                 }
 

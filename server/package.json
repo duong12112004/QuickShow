@@ -21,6 +21,7 @@
     "inngest": "^3.52.4",
     "mongoose": "^9.1.2",
     "nodemailer": "^8.0.2",
+    "socket.io": "^4.8.3",
     "stripe": "^20.4.1",
     "svix": "^1.87.0"
   },

@@ -1,7 +1,7 @@
 import axios from "axios";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
-import Room from "../models/Room.js"; 
+import Room from "../models/Room.js";
 import { inngest } from "../inngest/index.js";
 
 // 1. API lấy danh sách phim đang chiếu từ TMDB
@@ -102,7 +102,7 @@ export const getShows = async (req, res) => {
         shows.forEach(show => {
             uniqueMoviesMap.set(show.movie._id.toString(), show.movie);
         });
-        
+
         res.json({ success: true, shows: Array.from(uniqueMoviesMap.values()) });
     } catch (error) {
         console.error(error);
@@ -118,22 +118,22 @@ export const getShow = async (req, res) => {
         const shows = await Show.find({
             movie: movieId,
             showDateTime: { $gte: new Date() }
-        }).populate('room'); 
+        }).populate('room');
 
         const movie = await Movie.findById(movieId);
         const dateTime = {};
 
         shows.forEach((show) => {
             // SỬA TẠI ĐÂY: Dùng hàm chuẩn của Javascript để format ngày theo đúng múi giờ VN (không tự cộng trừ tay)
-            const date = new Date(show.showDateTime).toLocaleDateString('en-CA', { 
-                timeZone: 'Asia/Ho_Chi_Minh' 
-            }); 
-            
+            const date = new Date(show.showDateTime).toLocaleDateString('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh'
+            });
+
             if (!dateTime[date]) {
                 dateTime[date] = [];
             }
             dateTime[date].push({
-                time: show.showDateTime, 
+                time: show.showDateTime,
                 showId: show._id,
                 roomName: show.room?.name || "N/A"
             });
@@ -149,21 +149,22 @@ export const getShow = async (req, res) => {
 export const getSeatLayoutForShow = async (req, res) => {
     try {
         const { showId } = req.params;
-        
+
         const show = await Show.findById(showId).populate('room');
 
         if (!show) return res.json({ success: false, message: "Suất chiếu không tồn tại!" });
         if (!show.room) return res.json({ success: false, message: "Phòng chiếu không tồn tại!" });
 
-        const occupiedSeatsArray = Object.keys(show.occupiedSeats);
+        const occupiedSeatsArray = show.occupiedSeats ? Object.keys(show.occupiedSeats) : [];
+        const heldSeatsArray = show.heldSeats ? Object.keys(show.heldSeats) : [];
 
         res.json({
             success: true,
             roomName: show.room.name,
             basePrice: show.basePrice,
-            seatMap: show.room.seatMap, 
-            occupiedSeats: occupiedSeatsArray ,
-            heldSeats: Object.keys(show.heldSeats)
+            seatMap: show.room.seatMap,
+            occupiedSeats: occupiedSeatsArray,
+            heldSeats: heldSeatsArray
         });
     } catch (error) {
         res.json({ success: false, message: error.message });

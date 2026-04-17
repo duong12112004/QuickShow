@@ -55,7 +55,7 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
   {id: 'release-seats-delete-booking'},
   {event: "app/checkpayment"},
   async ({ event, step }) => {
-      const tenMinutesLater = new Date(Date.now() + 3 * 60 * 1000);
+      const tenMinutesLater = new Date(Date.now() + 5 * 60 * 1000);
       await step.sleepUntil('wait-for-10-minutes', tenMinutesLater);
 
       await step.run('check-payment-status', async () => {
@@ -70,6 +70,15 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
               });
               show.markModified('heldSeats');
               await show.save();
+
+              // --- THÊM ĐOẠN NÀY ĐỂ BÁO TÍN HIỆU NHẢ GHẾ ---
+              if (global.io) {
+                // Phát tín hiệu 'seats_released' cho tất cả ai đang trong phòng
+                global.io.to(validShowId).emit('seats_released', booking.bookedSeats);
+                console.log(`[Socket] Đã phát tín hiệu nhả ghế do quá hạn!`);
+            }
+            // ---------------------------------------------
+
               await Booking.findByIdAndDelete(booking._id);
           }
       });
