@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+// Component hiển thị màn hình chờ tải dữ liệu hoặc xử lý thanh toán
 const Loading = () => {
 
   const { nextUrl } = useParams()
@@ -8,11 +9,15 @@ const Loading = () => {
 
   useEffect(() => {
     if (nextUrl) {
-      setTimeout(() => {
+      // Chuyển hướng sau 8 giây (Thường dùng để mô phỏng thời gian đợi Stripe xử lý)
+      const timer = setTimeout(() => {
         navigate('/' + nextUrl)
-      }, 8000)
+      }, 5000)
+      
+      // Cleanup timer để tránh memory leak nếu component bị unmount sớm
+      return () => clearTimeout(timer)
     }
-  }, [])
+  }, [nextUrl, navigate])
 
   return (
     <div className='flex justify-center items-center h-[80vh]'>

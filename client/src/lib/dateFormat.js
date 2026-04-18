@@ -1,32 +1,32 @@
+// Định dạng ngày giờ ngắn gọn chuẩn Việt Nam (locale vi-VN)
 export const dateFormat = (date) => {
-    return new Date(date).toLocaleString('en-US', {
+    return new Date(date).toLocaleString('vi-VN', {
         weekday: 'short',
-        month: 'long',
+        month: 'numeric',
         day: 'numeric',
-        hour: 'numeric',
-        minute: 'numeric'
-    })
-}
-// Hàm format thời gian sang Tiếng Việt
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+// Định dạng thời gian chi tiết có kèm thứ trong tuần
 export const formatTimeVN = (dateString) => {
     const date = new Date(dateString);
 
-    // Mảng tên các thứ trong tuần
     const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 
-    const dayName = days[date.getDay()]; // Lấy thứ
-    const d = String(date.getDate()).padStart(2, '0'); // Lấy ngày (thêm số 0 đằng trước nếu < 10)
-    const m = String(date.getMonth() + 1).padStart(2, '0'); // Lấy tháng (tháng trong JS bắt đầu từ 0 nên phải +1)
-    const y = date.getFullYear(); // Lấy năm
+    const dayName = days[date.getDay()];
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
 
-    const h = String(date.getHours()).padStart(2, '0'); // Lấy giờ
-    const min = String(date.getMinutes()).padStart(2, '0'); // Lấy phút
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
 
-    // Ghép chuỗi theo đúng thứ tự bạn muốn
     return `${dayName}, ${d}/${m}/${y} lúc ${h}:${min}`;
 };
 
-// 1. Hàm lấy thời gian HIỆN TẠI (Dùng để chặn ngày quá khứ ở thẻ input)
+// Lấy thời gian thực tại trình duyệt để giới hạn dữ liệu đầu vào (min/max) cho thẻ input datetime-local
 export const getCurrentDateTimeLocal = () => {
     const d = new Date();
     const year = d.getFullYear();
@@ -35,9 +35,9 @@ export const getCurrentDateTimeLocal = () => {
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
+};
 
-// 2. Hàm chuyển đổi một thời gian BẤT KỲ sang chuẩn của thẻ <input type="datetime-local">
+// Chuẩn hóa chuỗi thời gian bất kỳ về định dạng tương thích với thẻ <input type="datetime-local">
 export const formatToDateTimeLocal = (dateString) => {
     const d = new Date(dateString);
     const year = d.getFullYear();
@@ -46,4 +46,4 @@ export const formatToDateTimeLocal = (dateString) => {
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
+};

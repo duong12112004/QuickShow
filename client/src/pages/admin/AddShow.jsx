@@ -11,33 +11,34 @@ const AddShow = () => {
   
   const [nowPlayingMovies, setNowPlayingMovies] = useState([])
   const [selectedMovie, setSelectedMovie] = useState(null)
-  const [rooms, setRooms] = useState([]) // Thêm state lưu danh sách phòng
-  const [selectedRoom, setSelectedRoom] = useState("") // Thêm state lưu phòng được chọn
+  const [rooms, setRooms] = useState([]) 
+  const [selectedRoom, setSelectedRoom] = useState("") 
   const [dateTimeSelection, setDateTimeSelection] = useState({})
   const [dateTimeInput, setDateTimeInput] = useState("")
-  const [basePrice, setBasePrice] = useState("") // Đổi thành basePrice
+  const [basePrice, setBasePrice] = useState("") 
   const [addingShow, setAddingShow] = useState(false)
 
-  // Fetch danh sách phim
+  // API lấy danh sách phim đang chiếu từ TMDB
   const fetchNowPlayingMovies = async () => {
     try {
       const { data } = await axios.get('/api/show/now-playing', {
         headers: { Authorization: `Bearer ${await getToken()}` }
       });
       if (data.success) setNowPlayingMovies(data.movies);
-    } catch (error) { console.error('Error:', error); }
+    } catch (error) { console.error('Lỗi khi tải danh sách phim:', error); }
   };
 
-  // Fetch danh sách phòng chiếu
+  // API lấy danh sách phòng chiếu đã thiết lập trong Database
   const fetchRooms = async () => {
     try {
       const { data } = await axios.get('/api/admin/rooms', {
-        headers: { Authorization: `Bearer ${await getToken()}` } // Tùy chỉnh nếu bạn có auth
+        headers: { Authorization: `Bearer ${await getToken()}` } 
       });
       if (data.success) setRooms(data.rooms);
-    } catch (error) { console.error('Error fetching rooms:', error); }
+    } catch (error) { console.error('Lỗi khi tải danh sách phòng chiếu:', error); }
   }
 
+  // Thêm mốc thời gian chiếu vào danh sách chuẩn bị submit
   const handleDateTimeAdd = () => {
     if (!dateTimeInput) return;
     const [date, time] = dateTimeInput.split("T")
@@ -52,6 +53,7 @@ const AddShow = () => {
     })
   }
 
+  // Xóa mốc thời gian chiếu đã chọn
   const handlRemoveTime = (date, time) => {
     setDateTimeSelection((prev) => {
       const filteredTimes = prev[date].filter((t) => t !== time);
@@ -63,11 +65,12 @@ const AddShow = () => {
     })
   }
 
+  // Gửi dữ liệu tạo suất chiếu lên Server
   const handleSubmit = async () => {
     try {
       setAddingShow(true);
 
-      // Validate bắt buộc phải chọn Room
+      // Validate dữ liệu đầu vào
       if (!selectedMovie || !selectedRoom || Object.keys(dateTimeSelection).length === 0 || !basePrice) {
         setAddingShow(false);
         return toast.error('Vui lòng điền đầy đủ thông tin (Phim, Phòng, Ngày giờ, Giá gốc)');
@@ -77,9 +80,9 @@ const AddShow = () => {
 
       const payload = {
         movieId: selectedMovie,
-        roomId: selectedRoom, // Gửi roomId lên backend
+        roomId: selectedRoom, 
         showsInput,
-        basePrice: Number(basePrice) // Gửi giá gốc
+        basePrice: Number(basePrice) 
       };
 
       const { data } = await axios.post('/api/show/add', payload, {
@@ -88,6 +91,7 @@ const AddShow = () => {
 
       if (data.success) {
         toast.success(data.message);
+        // Reset form sau khi thêm thành công
         setSelectedMovie(null);
         setSelectedRoom("");
         setDateTimeSelection({});
@@ -96,7 +100,7 @@ const AddShow = () => {
         toast.error(data.message);
       }
     } catch (error) {
-      toast.error('An error occurred. Please try again.');
+      toast.error('Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.');
     } finally {
       setAddingShow(false);
     }
@@ -105,14 +109,16 @@ const AddShow = () => {
   useEffect(() => {
     if (user) {
       fetchNowPlayingMovies();
-      fetchRooms(); // Gọi API lấy phòng khi load trang
+      fetchRooms(); 
     }
   }, [user])
 
   return (
     <>
-      <Title text1="Add" text2='Shows' />
-      <p className='mt-10 text-lg font-medium'>Now Playing Movies</p>
+      <Title text1="Thêm" text2='Suất chiếu' />
+      
+      {/* Khối chọn Phim */}
+      <p className='mt-10 text-lg font-medium'>Danh sách phim đang chiếu</p>
       <div className='overflow-x-auto pb-4'>
         <div className='group flex flex-wrap gap-4 mt-4 w-max '>
           {nowPlayingMovies.map((movie) => (
@@ -135,57 +141,57 @@ const AddShow = () => {
                 </div>
               )}
               <p className='font-medium truncate'>{movie.title}</p>
-              <p className='text-gray-400 text-sm'>{movie.release_date}</p>
+              <p className='text-gray-400 text-sm'>Khởi chiếu: {movie.release_date}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* --- MENU CHỌN PHÒNG CHIẾU MỚI THÊM --- */}
+      {/* Khối chọn Phòng chiếu */}
       <div className='mt-8'>
-        <label className='block text-sm font-medium mb-2'>Select Room</label>
+        <label className='block text-sm font-medium mb-2'>Chọn phòng chiếu</label>
         <select 
           value={selectedRoom} 
           onChange={(e) => setSelectedRoom(e.target.value)} 
           className='bg-transparent border border-gray-600 px-3 py-2 rounded-md outline-none w-full max-w-md text-white'
         >
-          <option value="" className='bg-black text-gray-400'>-- Select a Room --</option>
+          <option value="" className='bg-black text-gray-400'>-- Vui lòng chọn một phòng chiếu --</option>
           {rooms.map(room => (
             <option key={room._id} value={room._id} className='bg-black'>
-            {room.name} ({room.roomType})
-        </option>
+                {room.name} ({room.roomType})
+            </option>
           ))}
         </select>
       </div>
 
-      {/* {Show Price Input -> Base Price} */}
+      {/* Khối cấu hình Giá vé cơ bản */}
       <div className='mt-6'>
-        <label className='block text-sm font-medium mb-2'>Base Price (Giá gốc)</label>
+        <label className='block text-sm font-medium mb-2'>Giá vé tiêu chuẩn (Giá gốc)</label>
         <div className='inline-flex items-center gap-2 border border-gray-600 px-3 py-2 rounded-md'>
           <p className='text-gray-400 text-sm'>{currency}</p>
-          <input min={0} type='number' value={basePrice} onChange={(e) => setBasePrice(e.target.value)} placeholder='Enter base price' className='outline-none' />
+          <input min={0} type='number' value={basePrice} onChange={(e) => setBasePrice(e.target.value)} placeholder='Nhập giá vé gốc (VD: 85000)' className='outline-none' />
         </div>
       </div>
 
-      {/* {Date & Time Selection} */}
+      {/* Khối cấu hình Lịch chiếu */}
       <div className='mt-6'>
-        <label className='block text-sm font-medium mb-2 '>Select Date and Time</label>
+        <label className='block text-sm font-medium mb-2'>Chọn ngày và giờ chiếu</label>
         <div className='inline-flex gap-5 border border-gray-600 p-1 pl-3 rounded-lg'>
           <input type="datetime-local" value={dateTimeInput} onChange={(e) => setDateTimeInput(e.target.value)} className='outline-none rounded-md ' />
           <button onClick={handleDateTimeAdd} className='bg-primary/80 text-white px-3 py-2 text-sm rounded-lg hover:bg-primary cursor-pointer'>
-            Add Time
+            Thêm lịch
           </button>
         </div>
       </div>
       
-      {/* {Display Select Times} */}
+      {/* Hiển thị danh sách lịch chiếu đã chọn */}
       {Object.keys(dateTimeSelection).length > 0 && (
         <div className='mt-6'>
-          <h2 className='mb-2'>Selected Date-Time</h2>
+          <h2 className='mb-2 text-sm font-medium'>Các mốc thời gian đã chọn:</h2>
           <ul className='space-y-3'>
             {Object.entries(dateTimeSelection).map(([date, times]) => (
               <li key={date}>
-                <div className='font-medium'>{date}</div>
+                <div className='font-medium text-gray-300'>Ngày: {date}</div>
                 <div className='flex flex-wrap gap-2 mt-1 text-sm'>
                   {times.map((time) => (
                     <div key={time} className='border border-primary px-2 py-1 flex items-center rounded'>
@@ -200,8 +206,9 @@ const AddShow = () => {
         </div>
       )}
       
+      {/* Nút gửi dữ liệu */}
       <button onClick={handleSubmit} disabled={addingShow} className='bg-primary text-white px-8 py-2 mt-6 rounded hover:bg-primary/90 transition-all cursor-pointer'>
-        Add Show
+        {addingShow ? 'Đang xử lý...' : 'Thêm suất chiếu'}
       </button>
     </>
   )

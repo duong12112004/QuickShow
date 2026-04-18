@@ -3,23 +3,35 @@ import Show from "../models/Show.js";
 import User from "../models/User.js";
 import Room from '../models/Room.js';
 
-// API to check if user is admin
+// Kiểm tra quyền Admin
 export const isAdmin = async (req, res) => {
     res.json({ success: true, isAdmin: true });
 }
 
-// API to get dashboard data
+// Lấy dữ liệu tổng quan cho trang Dashboard
 export const getDashboardData = async (req, res) => {
     try {
-        const bookings = await Booking.find({ isPaid: true });
+        // Sử dụng Aggregation để tính tổng doanh thu và số lượng vé từ các đơn đã thanh toán
+        const stats = await Booking.aggregate([
+            { $match: { isPaid: true } },
+            {
+                $group: {
+                    _id: null,
+                    totalRevenue: { $sum: "$amount" },
+                    totalBookings: { $sum: 1 }
+                }
+            }
+        ]);
+
+        // Lấy các suất chiếu sắp tới và thông tin phim tương ứng
         const activeShows = await Show.find({ showDateTime: { $gte: new Date() } })
             .populate('movie');
 
         const totalUser = await User.countDocuments();
 
         const dashboardData = {
-            totalBookings: bookings.length,
-            totalRevenue: bookings.reduce((acc, booking) => acc + booking.amount, 0),
+            totalBookings: stats[0]?.totalBookings || 0,
+            totalRevenue: stats[0]?.totalRevenue || 0,
             activeShows,
             totalUser
         };
@@ -27,24 +39,75 @@ export const getDashboardData = async (req, res) => {
         res.json({ success: true, dashboardData });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Lỗi khi tải dữ liệu Dashboard: " + error.message });
     }
 };
 
-// API to get all shows
+// Lấy danh sách tất cả các suất chiếu kèm doanh thu thực tế
 export const getAllShows = async (req, res) => {
     try {
-        const shows = await Show.find({ showDateTime: { $gte: new Date() } })
-            .populate('movie')
-            .sort({ showDateTime: 1 });
+        // Sử dụng Aggregation để tự động tính doanh thu dựa trên các booking đã thanh toán
+        const shows = await Show.aggregate([
+            { $match: { showDateTime: { $gte: new Date() } } },
+            {
+                $lookup: {
+                    from: 'bookings', 
+                    localField: '_id',
+                    foreignField: 'show',
+                    as: 'bookingDetails'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'movies',
+                    localField: 'movie',
+                    foreignField: '_id',
+                    as: 'movie'
+                }
+            },
+            { $unwind: '$movie' }, // Giải nén mảng movie thành một object
+            {
+                $addFields: {
+                    // Tính tổng tiền từ các hóa đơn đã thanh toán của suất chiếu này
+                    totalEarnings: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$bookingDetails",
+                                        as: "b",
+                                        cond: { $eq: ["$$b.isPaid", true] }
+                                    }
+                                },
+                                as: "paidB",
+                                in: "$$paidB.amount"
+                            }
+                        }
+                    },
+                    // Đếm số lượng vé đã thanh toán
+                    totalTickets: {
+                        $size: {
+                            $filter: {
+                                input: "$bookingDetails",
+                                as: "b",
+                                cond: { $eq: ["$$b.isPaid", true] }
+                            }
+                        }
+                    }
+                }
+            },
+            { $project: { bookingDetails: 0 } }, // Xóa trường dữ liệu tạm để tối ưu response
+            { $sort: { showDateTime: 1 } }
+        ]);
+
         res.json({ success: true, shows });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách suất chiếu: " + error.message });
     }
 };
 
-// API to get all bookings
+// Lấy danh sách lịch sử đặt vé (Bookings)
 export const getAllBookings = async (req, res) => {
     try {
         const bookings = await Booking.find({})
@@ -57,18 +120,19 @@ export const getAllBookings = async (req, res) => {
         res.json({ success: true, bookings });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách đặt vé: " + error.message });
     }
 };
 
+// Khởi tạo dữ liệu phòng chiếu mẫu (Seed data)
 export const seedCinemaData = async (req, res) => {
     try {
-        // --- 0. DỌN SẠCH DỮ LIỆU CŨ ---
+        // Xóa dữ liệu phòng chiếu cũ trước khi tạo mới
         await Room.deleteMany({});
 
-        // --- 1. CÁC HÀM TẠO SƠ ĐỒ GHẾ ĐA DẠNG ---
+        // --- CÁC HÀM TẠO SƠ ĐỒ GHẾ ---
 
-        // Loại 1: Sơ đồ Tiêu chuẩn (8 cột)
+        // Sơ đồ phòng Tiêu chuẩn (Standard) - 8 cột
         const generateStandardMap = () => {
             const seatMap = [];
             const rows = ['A', 'B', 'SPACE1', 'C', 'D', 'E', 'SPACE2', 'F', 'G'];
@@ -90,7 +154,7 @@ export const seedCinemaData = async (req, res) => {
             return seatMap;
         };
 
-        // Loại 2: Sơ đồ IMAX siêu lớn (10 cột)
+        // Sơ đồ phòng IMAX - 10 cột
         const generateIMAXMap = () => {
             const seatMap = [];
             const rows = ['A', 'B', 'C', 'SPACE1', 'D', 'E', 'F', 'G', 'SPACE2', 'H', 'I'];
@@ -112,14 +176,14 @@ export const seedCinemaData = async (req, res) => {
             return seatMap;
         };
 
-        // Loại 3: Sơ đồ Gold Class siêu VIP (6 cột, không có ghế thường)
+        // Sơ đồ phòng Gold Class (Chỉ có VIP và COUPLE) - 6 cột
         const generateGoldClassMap = () => {
             const seatMap = [];
             const rows = ['A', 'B', 'C', 'SPACE1', 'D', 'E'];
             rows.forEach(rowLabel => {
                 if (rowLabel.startsWith('SPACE')) return seatMap.push({ row: rowLabel, seats: [] });
                 const seats = [];
-                let type = 'VIP'; // Mặc định là VIP
+                let type = 'VIP'; 
                 if (['D', 'E'].includes(rowLabel)) type = 'COUPLE';
 
                 for (let i = 1; i <= 6; i++) {
@@ -133,7 +197,7 @@ export const seedCinemaData = async (req, res) => {
             return seatMap;
         };
 
-        // --- 2. XÂY DỰNG 6 PHÒNG CHIẾU ---
+        // --- DANH SÁCH CÁC PHÒNG CHIẾU SẼ TẠO ---
         const roomsToCreate = [
             { name: "Cinema 1", roomType: "2D", seatMap: generateStandardMap() },
             { name: "Cinema 2", roomType: "2D", seatMap: generateStandardMap() },
@@ -147,22 +211,22 @@ export const seedCinemaData = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Đã hoàn tất xây dựng tổ hợp 6 Phòng chiếu đa dạng!",
+            message: "Đã khởi tạo thành công dữ liệu cho 6 phòng chiếu!",
             rooms: newRooms
         });
 
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Lỗi khi tạo dữ liệu phòng chiếu: " + error.message });
     }
 };
 
+// Lấy danh sách các phòng chiếu
 export const getAllRooms = async (req, res) => {
     try {
-        // Lấy danh sách phòng trực tiếp
         const rooms = await Room.find().sort({ name: 1 });
         res.json({ success: true, rooms });
     } catch (error) {
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách phòng chiếu: " + error.message });
     }
 };

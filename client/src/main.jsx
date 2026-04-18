@@ -5,12 +5,12 @@ import { BrowserRouter } from 'react-router-dom'
 import { ClerkProvider } from '@clerk/clerk-react'
 import { AppProvider } from './context/AppContext.jsx'
 
-
-// Import your Publishable Key
+// Nhúng khóa API của Clerk để xác thực người dùng
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!PUBLISHABLE_KEY) {
-  throw new Error('Missing Publishable Key')
+  // Việt hóa thông báo lỗi nếu quên cài biến môi trường
+  throw new Error('Thiếu khóa kết nối Clerk (VITE_CLERK_PUBLISHABLE_KEY) trong file .env')
 }
 
 createRoot(document.getElementById('root')).render(
@@ -19,7 +19,6 @@ createRoot(document.getElementById('root')).render(
       <AppProvider>
         <App />
       </AppProvider>
-
     </BrowserRouter>
   </ClerkProvider>,
 )

@@ -3,16 +3,17 @@ import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import { inngest } from "../inngest/index.js";
 
-export const stripeWebhooks = async (request, response) => {
+export const stripeWebhooks = async (req, res) => {
     const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
-    const sig = request.headers["stripe-signature"];
+    const sig = req.headers["stripe-signature"];
 
     let event;
 
     try {
-        event = stripeInstance.webhooks.constructEvent(request.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+        event = stripeInstance.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     } catch (error) {
-        return response.status(400).send(`Webhook Error: ${error.message}`);
+        console.error("Lỗi xác thực Webhook:", error.message);
+        return res.status(400).send(`Webhook Error: ${error.message}`);
     }
 
     try {
@@ -26,27 +27,26 @@ export const stripeWebhooks = async (request, response) => {
                 const session = sessionList.data[0];
                 const { bookingId } = session.metadata;
 
-                // 1. Lấy thông tin Booking và cập nhật trạng thái đã thanh toán
+                // 1. Cập nhật trạng thái thanh toán của hóa đơn
                 const booking = await Booking.findByIdAndUpdate(bookingId, {
                     isPaid: true,
                     paymentLink: ""
-                }, { new: true }); // Thêm { new: true } để trả về data mới nhất
+                }, { new: true });
 
-                // 2. LOGIC BẮT BUỘC ĐỂ SỬA LỖI NHÁY CAM: Chuyển ghế từ Held sang Occupied
+                // 2. Chuyển trạng thái ghế từ đang giữ (heldSeats) sang đã mua (occupiedSeats)
                 if (booking) {
                     const show = await Show.findById(booking.show);
                     if (show) {
                         booking.bookedSeats.forEach((seat) => {
-                            delete show.heldSeats[seat]; // Nhả ghế đang giữ
-                            show.occupiedSeats[seat] = booking.user; // Chốt ghế đã mua
+                            delete show.heldSeats[seat]; 
+                            show.occupiedSeats[seat] = booking.user; 
                         });
                         show.markModified('heldSeats');
                         show.markModified('occupiedSeats');
                         await show.save();
 
-                        // --- THÊM ĐOẠN CODE NÀY VÀO ĐÂY ---
-                        // Mượn cái loa Socket từ app để thông báo cho những ai đang ở trong phòng này
-                        const io = request.app.get('io');
+                        // Phát tín hiệu Socket.io để cập nhật giao diện real-time cho các user khác
+                        const io = req.app.get('io');
                         if (io) {
                             io.to(booking.show.toString()).emit('seats_booked_successfully', booking.bookedSeats);
                             console.log(`[Socket] Đã phát tín hiệu chốt vé cho suất: ${booking.show}`);
@@ -54,7 +54,7 @@ export const stripeWebhooks = async (request, response) => {
                     }
                 }
 
-                // 3. Gửi Confirmation Email
+                // 3. Đẩy task gửi email xác nhận vào Inngest
                 await inngest.send({
                     name: "app/show.booked",
                     data: { bookingId }
@@ -64,12 +64,12 @@ export const stripeWebhooks = async (request, response) => {
             }
 
             default:
-                console.log('Unhandled event type:', event.type);
+                console.log('Sự kiện Stripe chưa được xử lý:', event.type);
         }
 
-        response.json({ received: true });
+        res.json({ received: true });
     } catch (error) {
-        console.error('Error processing webhook:', error);
-        response.status(500).send("Internal Server Error");
+        console.error('Lỗi khi xử lý Webhook:', error);
+        res.status(500).send("Internal Server Error");
     }
 };

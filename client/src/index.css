@@ -1,13 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Raleway:ital,wght@0,100..900;1,100..900&display=swap');
+/* Đổi sang font Inter và thêm subset=vietnamese để hỗ trợ hiển thị dấu tiếng Việt mượt mà */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap&subset=vietnamese');
 @import "tailwindcss";
 
 @theme{
-  --color-primary:#F84565;
+  --color-primary: #F84565;
   --color-primary-dull: #D63854;
 }
 
 * {
-  font-family: "Outfit", sans-serif;
+  /* Áp dụng font Inter cho toàn bộ phần tử */
+  font-family: "Inter", sans-serif;
   scrollbar-width: thin;
   scrollbar-color: #787777 #1e1e1e;
 }
@@ -21,15 +23,18 @@ body{
   scrollbar-width: none;
 }
 
+/* Ẩn mũi tên tăng giảm số của thẻ input type="number" */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
 
+/* Đảo màu icon lịch của thẻ input type="datetime-local" cho hợp với Dark Mode */
 ::-webkit-calendar-picker-indicator{
-  filter:invert(1);
+  filter: invert(1);
 } 
 
+/* Tùy chỉnh thanh cuộn ngang (Scrollbar) cho đẹp hơn */
 .custom-scrollbar::-webkit-scrollbar {
   height: 6px;
 }

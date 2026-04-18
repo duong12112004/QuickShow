@@ -1,17 +1,13 @@
-
 import { inngest } from "../inngest/index.js";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
-import stripe from 'stripe'
+import stripe from 'stripe';
 
-
-// Hàm kiểm tra xem các chỗ ngồi đã chọn có còn trống cho một bộ phim hay không
+// Kiểm tra tình trạng ghế trống của suất chiếu
 const checkSeatsAvailability = async (showId, selectedSeats) => {
     try {
         const showData = await Show.findById(showId);
         if (!showData) return false;
-
-        const occupiedSeats = showData.occupiedSeats;
 
         const isAnySeatTaken = selectedSeats.some(seat => 
             showData.occupiedSeats[seat] || showData.heldSeats[seat]
@@ -24,7 +20,7 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
     }
 };
 
-// Thay thế hàm createBooking trong bookingController.js
+// Xử lý logic đặt vé và tạo phiên thanh toán Stripe
 export const createBooking = async (req, res) => {
     try {
         const { userId } = req.auth();
@@ -33,16 +29,15 @@ export const createBooking = async (req, res) => {
 
         const isAvailable = await checkSeatsAvailability(showId, selectedSeats);
         if (!isAvailable) {
-            return res.json({ success: false, message: "Selected Seats are not available." });
+            return res.json({ success: false, message: "Ghế bạn chọn đã có người đặt hoặc đang được giữ." });
         }
 
-        // Lấy thông tin suất chiếu kèm theo Phòng và Phim
         const showData = await Show.findById(showId).populate('movie').populate('room');
         if (!showData || !showData.room) {
-            return res.json({ success: false, message: "Lỗi dữ liệu suất chiếu hoặc phòng." });
+            return res.json({ success: false, message: "Lỗi truy xuất dữ liệu suất chiếu hoặc phòng." });
         }
 
-        // --- BACKEND TỰ TÍNH TIỀN ĐỂ CHỐNG HACK ---
+        // Tính toán tổng tiền vé tại Backend dựa trên loại ghế để đảm bảo tính toàn vẹn dữ liệu
         const seatMap = showData.room.seatMap;
         const basePrice = showData.basePrice;
         let totalAmount = 0;
@@ -60,32 +55,32 @@ export const createBooking = async (req, res) => {
             else totalAmount += basePrice;
         });
 
-        // Tạo hóa đơn mới
+        // Tạo bản ghi hóa đơn mới
         const booking = await Booking.create({
             user: userId,
             show: showId,
-            roomName: showData.room.name, // Lưu tên phòng vào hóa đơn
-            amount: totalAmount, // Lưu tổng tiền đã tính
+            roomName: showData.room.name,
+            amount: totalAmount,
             bookedSeats: selectedSeats
         });
 
-        // Cập nhật ghế đang đặt
+        // Đưa ghế vào trạng thái chờ để khóa tạm thời trong quá trình người dùng thanh toán
         selectedSeats.forEach((seat) => {
-            showData.heldSeats[seat] = userId; // Đưa vào hàng chờ
+            showData.heldSeats[seat] = userId; 
         });
         showData.markModified('heldSeats');
         await showData.save();
 
-        // --- CẤU HÌNH STRIPE ---
-        const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY)
+        // Khởi tạo phiên giao dịch Stripe
+        const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
         const line_items = [{
             price_data: {
-                currency: 'vnd', // LƯU Ý: Nếu dùng tiền Việt, bạn nên để là 'vnd', còn 'usd' thì chia tỷ giá
+                currency: 'vnd',
                 product_data: { name: showData.movie.title },
-                unit_amount: Math.floor(booking.amount) // Stripe VND không cần nhân 100
+                unit_amount: Math.floor(booking.amount)
             },
             quantity: 1
-        }]
+        }];
 
         const session = await stripeInstance.checkout.sessions.create({
             success_url: `${origin}/loading/my-bookings`,
@@ -94,11 +89,12 @@ export const createBooking = async (req, res) => {
             mode: 'payment',
             metadata: { bookingId: booking._id.toString() },
             expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-        })
+        });
 
-        booking.paymentLink = session.url
-        await booking.save()
+        booking.paymentLink = session.url;
+        await booking.save();
 
+        // Đẩy task vào hàng đợi Inngest để background job tự động kiểm tra trạng thái thanh toán
         await inngest.send({
             name: "app/checkpayment",
             data: { bookingId: booking._id.toString() }
@@ -108,9 +104,11 @@ export const createBooking = async (req, res) => {
 
     } catch (error) {
         console.log(error.message);
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Đã xảy ra lỗi trong quá trình đặt vé: " + error.message });
     }
 };
+
+// Lấy danh sách các ghế đã được đặt thành công
 export const getOccupiedSeats = async (req, res) => {
     try {
         const { showId } = req.params;
@@ -119,7 +117,6 @@ export const getOccupiedSeats = async (req, res) => {
         res.json({ success: true, occupiedSeats });
     } catch (error) {
         console.log(error.message);
-        res.json({ success: false, message: error.message });
+        res.json({ success: false, message: "Lỗi khi lấy dữ liệu ghế ngồi: " + error.message });
     }
 };
-

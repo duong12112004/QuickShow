@@ -1,9 +1,8 @@
-
 import { Server } from 'socket.io';
 import { handleSeatSockets } from './seatSocket.js';
 
 export const initializeSocket = (httpServer, app) => {
-    // Khởi tạo Socket.io
+    // Cấu hình và khởi tạo máy chủ Socket.io để hỗ trợ giao tiếp Real-time
     const io = new Server(httpServer, {
         cors: {
             origin: "*", 
@@ -11,16 +10,20 @@ export const initializeSocket = (httpServer, app) => {
         }
     });
 
-    // Gắn io vào app và global để Webhook và Inngest có thể gọi
+    // Lưu trữ đối tượng io vào app context và global object để tái sử dụng trong Webhook và các Background Jobs (Inngest)
     app.set('io', io);
     global.io = io;
 
-    // Lắng nghe sự kiện kết nối
+    // Quản lý các kết nối từ Client
     io.on('connection', (socket) => {
-        // Chuyển giao các sự kiện liên quan đến Ghế ngồi cho handleSeatSockets xử lý
+        console.log(`[Socket] Client đã kết nối: ${socket.id}`);
+
+        // Phân luồng xử lý các sự kiện Real-time cho nghiệp vụ đặt/giữ ghế
         handleSeatSockets(socket);
         
-        // (TƯƠNG LAI) Nếu có thêm tính năng chat, bạn có thể gọi: handleChatSockets(socket);
+        socket.on('disconnect', () => {
+            console.log(`[Socket] Client đã ngắt kết nối: ${socket.id}`);
+        });
     });
 
     return io;
