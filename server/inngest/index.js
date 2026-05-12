@@ -9,8 +9,10 @@ export const inngest = new Inngest({ id: "movie-ticket-booking" });
 
 // Đồng bộ dữ liệu: Tạo mới người dùng từ Clerk vào Database
 const syncUserCreation = inngest.createFunction(
-    { id: 'sync-user-from-clerk' },
-    { event: 'clerk/user.created' },
+    { 
+        id: 'sync-user-from-clerk',
+        triggers: { event: 'clerk/user.created' }
+    },
     async ({ event }) => {
         const { id, first_name, last_name, email_addresses, image_url } = event.data;
         const userData = {
@@ -25,8 +27,10 @@ const syncUserCreation = inngest.createFunction(
 
 // Đồng bộ dữ liệu: Xóa người dùng khỏi Database khi xóa trên Clerk
 const syncUserDeletion = inngest.createFunction(
-    { id: 'delete-user-with-clerk' },
-    { event: 'clerk/user.deleted' },
+    { 
+        id: 'delete-user-with-clerk',
+        triggers: { event: 'clerk/user.deleted' }
+    },
     async ({ event }) => {
         const { id } = event.data;
         await User.findByIdAndDelete(id);
@@ -35,8 +39,10 @@ const syncUserDeletion = inngest.createFunction(
 
 // Đồng bộ dữ liệu: Cập nhật thông tin người dùng từ Clerk
 const syncUserUpdation = inngest.createFunction(
-    { id: 'update-user-from-clerk' },
-    { event: 'clerk/user.updated' },
+    { 
+        id: 'update-user-from-clerk',
+        triggers: { event: 'clerk/user.updated' }
+    },
     async ({ event }) => {
         const { id, first_name, last_name, email_addresses, image_url } = event.data;
         const userData = {
@@ -51,11 +57,13 @@ const syncUserUpdation = inngest.createFunction(
 
 // Tự động hủy hóa đơn và nhả ghế nếu không thanh toán sau 5 phút
 const releaseSeatsAndDeleteBooking = inngest.createFunction(
-    { id: 'release-seats-delete-booking' },
-    { event: "app/checkpayment" },
+    { 
+        id: 'release-seats-delete-booking',
+        triggers: { event: "app/checkpayment" }
+    },
     async ({ event, step }) => {
         // Hẹn giờ chờ 5 phút
-        const fiveMinutesLater = new Date(Date.now() + 5 * 60 * 1000);
+        const fiveMinutesLater = new Date(Date.now() + 2 * 60 * 1000);
         await step.sleepUntil('wait-for-5-minutes', fiveMinutesLater);
 
         await step.run('check-payment-status', async () => {
@@ -91,8 +99,10 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
 
 // Gửi Email xác nhận đặt vé thành công
 const sendBookingConfirmationEmail = inngest.createFunction(
-    { id: "send-booking-confirmation-email" },
-    { event: "app/show.booked" },
+    { 
+        id: "send-booking-confirmation-email",
+        triggers: { event: "app/show.booked" }
+    },
     async ({ event, step }) => {
         const { bookingId } = event.data;
 
@@ -122,8 +132,10 @@ const sendBookingConfirmationEmail = inngest.createFunction(
 
 // Gửi Email nhắc nhở trước giờ chiếu 8 tiếng
 const sendShowReminders = inngest.createFunction(
-    { id: "send-show-reminders" },
-    { cron: "0 * * * *" }, // Chạy mỗi giờ 1 lần
+    { 
+        id: "send-show-reminders",
+        triggers: { cron: "0 * * * *" } // Chạy mỗi giờ 1 lần
+    },
     async ({ step }) => {
         const now = new Date();
         const in8Hours = new Date(now.getTime() + 8 * 60 * 60 * 1000);
@@ -198,8 +210,10 @@ const sendShowReminders = inngest.createFunction(
 
 // Gửi Email thông báo khi có suất chiếu/phim mới được thêm vào hệ thống
 const sendNewShowNotifications = inngest.createFunction(
-    { id: "send-new-show-notifications" },
-    { event: "app/show.added" },
+    { 
+        id: "send-new-show-notifications",
+        triggers: { event: "app/show.added" }
+    },
     async ({ event }) => {
         const { movieTitle } = event.data;
 
