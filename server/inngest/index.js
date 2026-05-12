@@ -106,26 +106,31 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     async ({ event, step }) => {
         const { bookingId } = event.data;
 
-        const booking = await Booking.findById(bookingId).populate({
-            path: 'show',
-            populate: { path: "movie", model: "Movie" }
-        }).populate('user');
+        // BẮT BUỘC bọc các tác vụ gọi DB và API bên ngoài vào step.run()
+        await step.run('fetch-data-and-send-email', async () => {
+            const booking = await Booking.findById(bookingId).populate({
+                path: 'show',
+                populate: { path: "movie", model: "Movie" }
+            }).populate('user');
 
-        await sendEmail({
-            to: booking.user.email,
-            subject: `Xác nhận đặt vé thành công: ${booking.show.movie.title}`,
-            body: `
-              <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
-                  <h2>Xin chào ${booking.user.name},</h2>
-                  <p>Vé xem phim <strong style="color: #F84565;">${booking.show.movie.title}</strong> của bạn đã được thanh toán và xác nhận thành công.</p>
-                  <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                      <p style="margin: 0 0 10px 0;"><strong>Ngày chiếu:</strong> ${new Date(booking.show.showDateTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>
-                      <p style="margin: 0;"><strong>Giờ chiếu:</strong> ${new Date(booking.show.showDateTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p>
+            await sendEmail({
+                to: booking.user.email,
+                subject: `Xác nhận đặt vé thành công: ${booking.show.movie.title}`,
+                body: `
+                  <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
+                      <h2>Xin chào ${booking.user.name},</h2>
+                      <p>Vé xem phim <strong style="color: #F84565;">${booking.show.movie.title}</strong> của bạn đã được thanh toán và xác nhận thành công.</p>
+                      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                          <p style="margin: 0 0 10px 0;"><strong>Ngày chiếu:</strong> ${new Date(booking.show.showDateTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>
+                          <p style="margin: 0;"><strong>Giờ chiếu:</strong> ${new Date(booking.show.showDateTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                      <p>Chúc bạn có một buổi xem phim vui vẻ!</p>
+                      <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
                   </div>
-                  <p>Chúc bạn có một buổi xem phim vui vẻ!</p>
-                  <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
-              </div>
-          `
+              `
+            });
+            
+            return { success: true }; // Trả về tín hiệu cho Inngest biết step đã xong
         });
     }
 );
