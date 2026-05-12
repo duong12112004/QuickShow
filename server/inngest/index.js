@@ -219,35 +219,36 @@ const sendNewShowNotifications = inngest.createFunction(
         id: "send-new-show-notifications",
         triggers: { event: "app/show.added" }
     },
-    async ({ event }) => {
+    async ({ event, step }) => {
         const { movieTitle } = event.data;
 
-        const users = await User.find({});
+        // Bọc DB query vào step
+        const users = await step.run('fetch-all-users', async () => {
+            return await User.find({}).select("name email");
+        });
 
-        for (const user of users) {
-            const userName = user.name;
-            const userEmail = user.email;
+        if (!users || users.length === 0) return { message: "Không có user để gửi." };
 
-            const subject = `Phim mới đã có mặt tại rạp: ${movieTitle}`;
-            const body = `
-              <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-                  <h2>Xin chào ${userName},</h2>
-                  <p>Hệ thống vừa cập nhật thêm lịch chiếu cho một bộ phim mới cực hot:</p>
-                  <h3 style="color: #F84565; margin: 10px 0;">"${movieTitle}"</h3>
-                  <p>Hãy nhanh tay truy cập ứng dụng của chúng tôi để đặt cho mình những vị trí ngồi đẹp nhất nhé!</p>
-                  <br/>
-                  <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
-              </div>
-          `;
-
-            await sendEmail({
-                to: userEmail,
-                subject,
-                body,
+        // Gửi email hàng loạt song song để tránh timeout
+        await step.run('send-emails-to-all-users', async () => {
+            const emailPromises = users.map(user => {
+                const subject = `Phim mới đã có mặt tại rạp: ${movieTitle}`;
+                const body = `
+                  <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                      <h2>Xin chào ${user.name},</h2>
+                      <p>Hệ thống vừa cập nhật thêm lịch chiếu cho một bộ phim mới cực hot:</p>
+                      <h3 style="color: #F84565; margin: 10px 0;">"${movieTitle}"</h3>
+                      <p>Hãy nhanh tay truy cập ứng dụng của chúng tôi để đặt cho mình những vị trí ngồi đẹp nhất nhé!</p>
+                      <br/>
+                      <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
+                  </div>
+              `;
+                return sendEmail({ to: user.email, subject, body });
             });
-        }
 
-        return { message: "Đã gửi thông báo phim mới thành công." };
+            await Promise.allSettled(emailPromises);
+            return { success: true };
+        });
     }
 );
 
