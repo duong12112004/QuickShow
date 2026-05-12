@@ -61,10 +61,13 @@ const MyBookings = () => {
               <p className='text-xl font-semibold mb-3 text-primary'>
                 {(item.amount || 0).toLocaleString()} {currency}
               </p>
-              {!item.isPaid && 
+              {!item.isPaid && item.status === 'pending' && item.paymentLink && 
               <Link to={item.paymentLink} className='bg-primary px-4 py-2 mb-3 text-sm rounded-full font-medium cursor-pointer hover:bg-primary-dull transition'>
                 Thanh toán
               </Link>}
+              {item.status === 'expired' && (
+                <p className='text-sm text-gray-400 mb-3'>Đã hết hạn giữ ghế</p>
+              )}
             </div>
             <div className='text-sm text-gray-300'>
                 <p><span className='text-gray-400'>Tổng số vé:</span> {item.bookedSeats.length}</p>

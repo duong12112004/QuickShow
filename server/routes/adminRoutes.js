@@ -9,5 +9,5 @@ adminRouter.get('/dashboard', protectAdmin, getDashboardData);
 adminRouter.get('/all-shows', protectAdmin, getAllShows);
 adminRouter.get('/all-bookings', protectAdmin, getAllBookings);
 adminRouter.get('/seed', protectAdmin, seedCinemaData);
-adminRouter.get('/rooms', getAllRooms)
+adminRouter.get('/rooms', protectAdmin, getAllRooms)
 export default adminRouter;

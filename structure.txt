@@ -1,0 +1,95 @@
+D:\QuickShow
+├─server
+|   ├─.env
+|   ├─package-lock.json
+|   ├─package.json
+|   ├─server.js
+|   ├─vercel.json
+|   ├─sockets
+|   |    ├─index.js
+|   |    └seatSocket.js
+|   ├─routes
+|   |   ├─adminRoutes.js
+|   |   ├─bookingRoutes.js
+|   |   ├─showRoutes.js
+|   |   └userRoutes.js
+|   ├─models
+|   |   ├─Booking.js
+|   |   ├─Movie.js
+|   |   ├─Room.js
+|   |   ├─Show.js
+|   |   └User.js
+|   ├─middleware
+|   |     └auth.js
+|   ├─inngest
+|   |    └index.js
+|   ├─controllers
+|   |      ├─adminController.js
+|   |      ├─bookingController.js
+|   |      ├─showController.js
+|   |      ├─stripeWebhooks.js
+|   |      └userController.js
+|   ├─configs
+|   |    ├─db.js
+|   |    └nodeMailer.js
+├─client
+|   ├─.env
+|   ├─eslint.config.js
+|   ├─index.html
+|   ├─package-lock.json
+|   ├─package.json
+|   ├─README.md
+|   ├─vercel.json
+|   ├─vite.config.js
+|   ├─src
+|   |  ├─App.jsx
+|   |  ├─index.css
+|   |  ├─main.jsx
+|   |  ├─pages
+|   |  |   ├─Favorite.jsx
+|   |  |   ├─Home.jsx
+|   |  |   ├─MovieDetails.jsx
+|   |  |   ├─Movies.jsx
+|   |  |   ├─MyBookings.jsx
+|   |  |   ├─SeatLayout.jsx
+|   |  |   ├─admin
+|   |  |   |   ├─AddShow.jsx
+|   |  |   |   ├─DashBoard.jsx
+|   |  |   |   ├─Layout.jsx
+|   |  |   |   ├─ListBookings.jsx
+|   |  |   |   └ListShows.jsx
+|   |  ├─lib
+|   |  |  ├─dateFormat.js
+|   |  |  ├─isoTimeFormat.js
+|   |  |  ├─kConverter.js
+|   |  |  └timeFormat.js
+|   |  ├─context
+|   |  |    └AppContext.jsx
+|   |  ├─configs
+|   |  |    └socket.js
+|   |  ├─components
+|   |  |     ├─BlurCircle.jsx
+|   |  |     ├─DateSelect.jsx
+|   |  |     ├─FeaturedSection.jsx
+|   |  |     ├─Footer.jsx
+|   |  |     ├─HeroSection.jsx
+|   |  |     ├─Loading.jsx
+|   |  |     ├─MovieCard.jsx
+|   |  |     ├─Navbar.jsx
+|   |  |     ├─TrailersSection.jsx
+|   |  |     ├─admin
+|   |  |     |   ├─AdminNavbar.jsx
+|   |  |     |   ├─AdminSidebar.jsx
+|   |  |     |   └Title.jsx
+|   |  ├─assets
+|   |  |   ├─appStore.svg
+|   |  |   ├─assets.js
+|   |  |   ├─backgroundImage.png
+|   |  |   ├─chartIcon.svg
+|   |  |   ├─favicon.svg
+|   |  |   ├─googlePlay.svg
+|   |  |   ├─logo.svg
+|   |  |   ├─marvelLogo.svg
+|   |  |   ├─profile.png
+|   |  |   ├─react.svg
+|   |  |   └screenImage.svg

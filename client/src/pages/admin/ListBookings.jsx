@@ -41,6 +41,7 @@ const ListBookings = () => {
                 <th className='p-2 font-medium'>Tên phim</th>
                 <th className='p-2 font-medium'>Lịch chiếu</th>
                 <th className='p-2 font-medium'>Ghế đã đặt</th>
+                <th className='p-2 font-medium'>Trạng thái</th>
                 <th className='p-2 font-medium'>Tổng tiền</th>
               </tr>
             </thead>
@@ -55,6 +56,7 @@ const ListBookings = () => {
                           ? Object.keys(item.bookedSeats).map(seat => item.bookedSeats[seat]).join(", ") 
                           : "Trống"}
                       </td>
+                      <td className='p-2'>{item.status || (item.isPaid ? "paid" : "pending")}</td>
                       <td className='p-2 text-primary font-medium'>{(item.amount || 0).toLocaleString()} {currency}</td>
                   </tr>
                 ))}

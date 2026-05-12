@@ -129,12 +129,6 @@ const SeatLayout = () => {
       if (!user) return toast.error('Vui lòng đăng nhập để tiếp tục!')
       if (!selectedTime || !selectedSeats.length) return toast.error('Vui lòng chọn khung giờ chiếu và ghế ngồi!')
 
-      // Phát tín hiệu khóa ghế lên hệ thống khi bắt đầu thanh toán
-      socket.emit('seat_held_checkout', {
-          showId: selectedTime.showId,
-          selectedSeats: selectedSeats
-      });
-
       const { data } = await axios.post('/api/booking/create', {
         showId: selectedTime.showId,
         selectedSeats
