@@ -224,14 +224,15 @@ const sendNewShowNotifications = inngest.createFunction(
 
         // Bọc DB query vào step
         const users = await step.run('fetch-all-users', async () => {
-            return await User.find({}).select("name email");
+            return await User.find({}).select("name email").lean();;
         });
 
         if (!users || users.length === 0) return { message: "Không có user để gửi." };
 
         // Gửi email hàng loạt song song để tránh timeout
         await step.run('send-emails-to-all-users', async () => {
-            const emailPromises = users.map(user => {
+            for (const user of users) {
+                try {
                 const subject = `Phim mới đã có mặt tại rạp: ${movieTitle}`;
                 const body = `
                   <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
@@ -243,10 +244,11 @@ const sendNewShowNotifications = inngest.createFunction(
                       <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
                   </div>
               `;
-                return sendEmail({ to: user.email, subject, body });
-            });
-
-            await Promise.allSettled(emailPromises);
+              await sendEmail({ to: user.email, subject, body });
+            } catch (error) {
+                console.error(`[Inngest] Lỗi gửi email phim mới cho ${user.email}:`, error.message);
+            }
+        }
             return { success: true };
         });
     }
