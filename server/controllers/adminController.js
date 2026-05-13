@@ -1,215 +1,15 @@
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
-import Room, {
+import Room from "../models/Room.js";
+import {
+    buildRoomErrorMessage,
     buildSeatLayoutStats,
-    ROOM_STATUSES,
-    ROOM_TYPES,
-    normalizeSeatMap
-} from "../models/Room.js";
-
-const buildErrorMessage = (fallbackMessage, error) => {
-    if (error?.code === 11000) {
-        return "Tên phòng chiếu đã tồn tại trong hệ thống.";
-    }
-
-    return `${fallbackMessage}: ${error.message}`;
-};
-
-const validateRoomPayload = (body, options = {}) => {
-    const { requireName = false, requireSeatMap = false } = options;
-    const payload = {};
-
-    if (body.name !== undefined || requireName) {
-        const name = `${body.name || ''}`.trim();
-        if (!name) {
-            throw new Error("Tên phòng chiếu không được để trống.");
-        }
-        payload.name = name;
-    }
-
-    if (body.roomType !== undefined) {
-        const roomType = `${body.roomType || ''}`.trim().toUpperCase();
-        if (!ROOM_TYPES.includes(roomType)) {
-            throw new Error("Loại phòng chiếu không hợp lệ.");
-        }
-        payload.roomType = roomType;
-    }
-
-    if (body.status !== undefined) {
-        const status = `${body.status || ''}`.trim().toUpperCase();
-        if (!ROOM_STATUSES.includes(status)) {
-            throw new Error("Trạng thái phòng chiếu không hợp lệ.");
-        }
-        payload.status = status;
-    }
-
-    if (body.maintenanceNote !== undefined || payload.status === 'MAINTENANCE') {
-        const maintenanceNote = `${body.maintenanceNote || ''}`.trim();
-
-        if (payload.status === 'MAINTENANCE' && !maintenanceNote) {
-            throw new Error("Cần nhập lý do bảo trì khi chuyển phòng sang trạng thái bảo trì.");
-        }
-
-        payload.maintenanceNote = maintenanceNote;
-    }
-
-    if (body.seatMap !== undefined || requireSeatMap) {
-        payload.seatMap = normalizeSeatMap(body.seatMap);
-    }
-
-    return payload;
-};
-
-const getRoomUsage = async (roomId) => {
-    const now = new Date();
-
-    const [totalShowsCount, futureShowsCount, nextShow] = await Promise.all([
-        Show.countDocuments({ room: roomId }),
-        Show.countDocuments({ room: roomId, showDateTime: { $gte: now } }),
-        Show.findOne({ room: roomId, showDateTime: { $gte: now } })
-            .sort({ showDateTime: 1 })
-            .select("showDateTime")
-            .lean()
-    ]);
-
-    return {
-        totalShowsCount,
-        futureShowsCount,
-        nextShowTime: nextShow?.showDateTime || null
-    };
-};
-
-const enrichRoomsWithUsage = async (rooms) => {
-    const now = new Date();
-    const roomIds = rooms.map((room) => room._id);
-
-    const [futureShows, totalShows] = await Promise.all([
-        Show.aggregate([
-            { $match: { room: { $in: roomIds }, showDateTime: { $gte: now } } },
-            {
-                $group: {
-                    _id: "$room",
-                    futureShowsCount: { $sum: 1 },
-                    nextShowTime: { $min: "$showDateTime" }
-                }
-            }
-        ]),
-        Show.aggregate([
-            { $match: { room: { $in: roomIds } } },
-            {
-                $group: {
-                    _id: "$room",
-                    totalShowsCount: { $sum: 1 }
-                }
-            }
-        ])
-    ]);
-
-    const futureShowMap = new Map(
-        futureShows.map((item) => [item._id.toString(), item])
-    );
-    const totalShowMap = new Map(
-        totalShows.map((item) => [item._id.toString(), item.totalShowsCount])
-    );
-
-    return rooms.map((room) => {
-        const futureShowData = futureShowMap.get(room._id.toString());
-
-        return {
-            ...room,
-            status: room.status || 'ACTIVE',
-            maintenanceNote: room.maintenanceNote || '',
-            capacity: room.capacity ?? buildSeatLayoutStats(room.seatMap || []).capacity,
-            futureShowsCount: futureShowData?.futureShowsCount || 0,
-            nextShowTime: futureShowData?.nextShowTime || null,
-            totalShowsCount: totalShowMap.get(room._id.toString()) || 0
-        };
-    });
-};
-
-const generateStandardMap = () => {
-    const seatMap = [];
-    const rows = ['A', 'B', 'SPACE1', 'C', 'D', 'E', 'SPACE2', 'F', 'G'];
-
-    rows.forEach((rowLabel) => {
-        if (rowLabel.startsWith('SPACE')) {
-            seatMap.push({ row: rowLabel, seats: [] });
-            return;
-        }
-
-        const seats = [];
-        let type = 'STANDARD';
-        if (['C', 'D', 'E'].includes(rowLabel)) type = 'VIP';
-        if (['F', 'G'].includes(rowLabel)) type = 'COUPLE';
-
-        for (let i = 1; i <= 8; i += 1) {
-            if (['C', 'D', 'E', 'F', 'G'].includes(rowLabel) && i === 5) {
-                seats.push({ seatNumber: `GAP-${rowLabel}`, seatType: 'EMPTY' });
-            }
-            seats.push({ seatNumber: `${rowLabel}${i}`, seatType: type });
-        }
-
-        seatMap.push({ row: rowLabel, seats });
-    });
-
-    return seatMap;
-};
-
-const generateIMAXMap = () => {
-    const seatMap = [];
-    const rows = ['A', 'B', 'C', 'SPACE1', 'D', 'E', 'F', 'G', 'SPACE2', 'H', 'I'];
-
-    rows.forEach((rowLabel) => {
-        if (rowLabel.startsWith('SPACE')) {
-            seatMap.push({ row: rowLabel, seats: [] });
-            return;
-        }
-
-        const seats = [];
-        let type = 'STANDARD';
-        if (['D', 'E', 'F', 'G'].includes(rowLabel)) type = 'VIP';
-        if (['H', 'I'].includes(rowLabel)) type = 'COUPLE';
-
-        for (let i = 1; i <= 10; i += 1) {
-            if (['D', 'E', 'F', 'G', 'H', 'I'].includes(rowLabel) && i === 6) {
-                seats.push({ seatNumber: `GAP-${rowLabel}`, seatType: 'EMPTY' });
-            }
-            seats.push({ seatNumber: `${rowLabel}${i}`, seatType: type });
-        }
-
-        seatMap.push({ row: rowLabel, seats });
-    });
-
-    return seatMap;
-};
-
-const generateGoldClassMap = () => {
-    const seatMap = [];
-    const rows = ['A', 'B', 'C', 'SPACE1', 'D', 'E'];
-
-    rows.forEach((rowLabel) => {
-        if (rowLabel.startsWith('SPACE')) {
-            seatMap.push({ row: rowLabel, seats: [] });
-            return;
-        }
-
-        const seats = [];
-        let type = 'VIP';
-        if (['D', 'E'].includes(rowLabel)) type = 'COUPLE';
-
-        for (let i = 1; i <= 6; i += 1) {
-            if (i === 4) {
-                seats.push({ seatNumber: `GAP-${rowLabel}`, seatType: 'EMPTY' });
-            }
-            seats.push({ seatNumber: `${rowLabel}${i}`, seatType: type });
-        }
-
-        seatMap.push({ row: rowLabel, seats });
-    });
-
-    return seatMap;
-};
+    enrichRoomsWithUsage,
+    generateSeatMapByRoomType,
+    getRoomUsage,
+    validateRoomPayload
+} from "../services/roomService.js";
 
 export const isAdmin = async (req, res) => {
     res.json({ success: true, isAdmin: true });
@@ -337,14 +137,19 @@ export const seedCinemaData = async (req, res) => {
 
         await Room.deleteMany({});
 
-        const roomsToCreate = [
-            { name: "Cinema 1", roomType: "2D", seatMap: generateStandardMap() },
-            { name: "Cinema 2", roomType: "2D", seatMap: generateStandardMap() },
-            { name: "Cinema 3", roomType: "3D", seatMap: generateStandardMap() },
-            { name: "IMAX 4", roomType: "IMAX", seatMap: generateIMAXMap() },
-            { name: "Gold Class 5", roomType: "GOLD_CLASS", seatMap: generateGoldClassMap() },
-            { name: "Sweetbox 6", roomType: "SWEETBOX", seatMap: generateGoldClassMap() }
+        const roomTypesToSeed = [
+            { name: "Cinema 1", roomType: "2D" },
+            { name: "Cinema 2", roomType: "2D" },
+            { name: "Cinema 3", roomType: "3D" },
+            { name: "IMAX 4", roomType: "IMAX" },
+            { name: "Gold Class 5", roomType: "GOLD_CLASS" },
+            { name: "Sweetbox 6", roomType: "SWEETBOX" }
         ];
+
+        const roomsToCreate = roomTypesToSeed.map((room) => ({
+            ...room,
+            seatMap: generateSeatMapByRoomType(room.roomType)
+        }));
 
         const newRooms = await Room.insertMany(roomsToCreate);
 
@@ -403,10 +208,8 @@ export const getRoomDetail = async (req, res) => {
 
 export const createRoom = async (req, res) => {
     try {
-        const payload = validateRoomPayload(req.body, {
-            requireName: true,
-            requireSeatMap: true
-        });
+        const payload = validateRoomPayload(req.body, { requireName: true });
+        payload.seatMap = generateSeatMapByRoomType(payload.roomType || '2D');
 
         const room = await Room.create(payload);
 
@@ -417,7 +220,7 @@ export const createRoom = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: buildErrorMessage("Lỗi khi tạo phòng chiếu", error) });
+        res.json({ success: false, message: buildRoomErrorMessage("Lỗi khi tạo phòng chiếu", error) });
     }
 };
 
@@ -433,11 +236,12 @@ export const updateRoom = async (req, res) => {
         const payload = validateRoomPayload(req.body);
         const usage = await getRoomUsage(roomId);
 
-        const isSeatMapChanging = payload.seatMap !== undefined;
+        const isSeatMapChanging = req.body.seatMap !== undefined;
         const isRoomTypeChanging = payload.roomType && payload.roomType !== room.roomType;
         const isPuttingRoomUnavailable = payload.status && payload.status !== 'ACTIVE' && payload.status !== room.status;
+        const shouldRegenerateSeatMap = isSeatMapChanging || isRoomTypeChanging;
 
-        if ((isSeatMapChanging || isRoomTypeChanging) && usage.futureShowsCount > 0) {
+        if (shouldRegenerateSeatMap && usage.futureShowsCount > 0) {
             return res.json({
                 success: false,
                 message: "Không thể sửa sơ đồ ghế hoặc loại phòng khi phòng đang còn suất chiếu sắp tới."
@@ -451,6 +255,10 @@ export const updateRoom = async (req, res) => {
             });
         }
 
+        if (shouldRegenerateSeatMap) {
+            payload.seatMap = generateSeatMapByRoomType(payload.roomType || room.roomType);
+        }
+
         Object.assign(room, payload);
         await room.save();
 
@@ -461,7 +269,7 @@ export const updateRoom = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: buildErrorMessage("Lỗi khi cập nhật phòng chiếu", error) });
+        res.json({ success: false, message: buildRoomErrorMessage("Lỗi khi cập nhật phòng chiếu", error) });
     }
 };
 
@@ -500,7 +308,7 @@ export const updateRoomStatus = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: buildErrorMessage("Lỗi khi cập nhật trạng thái phòng chiếu", error) });
+        res.json({ success: false, message: buildRoomErrorMessage("Lỗi khi cập nhật trạng thái phòng chiếu", error) });
     }
 };
 

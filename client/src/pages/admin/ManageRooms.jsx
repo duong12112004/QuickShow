@@ -1,14 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CirclePause,
+  PenSquare,
+  PlusCircle,
+  Save,
+  Trash2,
+  Wrench,
+  XCircle,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
+
+const PAGE_SIZE = 8
 
 const defaultForm = {
   name: '',
   roomType: '2D',
   status: 'ACTIVE',
   maintenanceNote: '',
-  layoutTemplate: 'STANDARD',
 }
 
 const generateStandardMap = () => {
@@ -94,16 +107,24 @@ const generateGoldClassMap = () => {
   return seatMap
 }
 
-const getSeatMapFromTemplate = (template) => {
+const getTemplateForRoomType = (roomType) => {
+  if (roomType === 'IMAX') return 'IMAX'
+  if (roomType === 'GOLD_CLASS' || roomType === 'SWEETBOX') return 'GOLD_CLASS'
+  return 'STANDARD'
+}
+
+const getSeatMapFromRoomType = (roomType) => {
+  const template = getTemplateForRoomType(roomType)
+
   if (template === 'IMAX') return generateIMAXMap()
   if (template === 'GOLD_CLASS') return generateGoldClassMap()
   return generateStandardMap()
 }
 
-const inferTemplateFromRoomType = (roomType) => {
-  if (roomType === 'IMAX') return 'IMAX'
-  if (roomType === 'GOLD_CLASS' || roomType === 'SWEETBOX') return 'GOLD_CLASS'
-  return 'STANDARD'
+const templateLabelMap = {
+  STANDARD: 'Standard',
+  IMAX: 'IMAX',
+  GOLD_CLASS: 'Gold Class / Sweetbox',
 }
 
 const getSeatStats = (seatMap = []) => {
@@ -130,9 +151,9 @@ const getSeatStats = (seatMap = []) => {
 }
 
 const statusLabel = {
-  ACTIVE: 'Đang khai thác',
+  ACTIVE: 'Active',
   MAINTENANCE: 'Bảo trì',
-  INACTIVE: 'Ngừng khai thác',
+  INACTIVE: 'InActive',
 }
 
 const ManageRooms = () => {
@@ -140,10 +161,10 @@ const ManageRooms = () => {
   const [rooms, setRooms] = useState([])
   const [selectedRoom, setSelectedRoom] = useState(null)
   const [formData, setFormData] = useState(defaultForm)
-  const [replaceSeatMap, setReplaceSeatMap] = useState(true)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
 
   const fetchRooms = async () => {
     try {
@@ -157,7 +178,7 @@ const ManageRooms = () => {
       } else {
         toast.error(data.message)
       }
-    } catch (error) {
+    } catch {
       toast.error('Không tải được danh sách phòng chiếu.')
     } finally {
       setLoading(false)
@@ -182,10 +203,8 @@ const ManageRooms = () => {
         roomType: room.roomType,
         status: room.status || 'ACTIVE',
         maintenanceNote: room.maintenanceNote || '',
-        layoutTemplate: inferTemplateFromRoomType(room.roomType),
       })
-      setReplaceSeatMap(false)
-    } catch (error) {
+    } catch {
       toast.error('Không tải được chi tiết phòng chiếu.')
     }
   }
@@ -196,15 +215,21 @@ const ManageRooms = () => {
     }
   }, [user])
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(rooms.length / PAGE_SIZE))
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [rooms.length, currentPage])
+
   const resetForm = () => {
     setSelectedRoom(null)
     setFormData(defaultForm)
-    setReplaceSeatMap(true)
   }
 
   const previewStats = useMemo(() => {
-    if (!selectedRoom || replaceSeatMap) {
-      return getSeatStats(getSeatMapFromTemplate(formData.layoutTemplate))
+    if (!selectedRoom) {
+      return getSeatStats(getSeatMapFromRoomType(formData.roomType))
     }
 
     return {
@@ -214,16 +239,20 @@ const ManageRooms = () => {
       couple: selectedRoom.seatStats?.couple || 0,
       empty: selectedRoom.seatStats?.empty || 0,
     }
-  }, [formData.layoutTemplate, replaceSeatMap, selectedRoom])
+  }, [formData.roomType, selectedRoom])
+
+  const totalPages = Math.max(1, Math.ceil(rooms.length / PAGE_SIZE))
+  const paginatedRooms = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE
+    return rooms.slice(startIndex, startIndex + PAGE_SIZE)
+  }, [rooms, currentPage])
+  const startRow = rooms.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const endRow = Math.min(currentPage * PAGE_SIZE, rooms.length)
 
   const handleChange = (event) => {
     const { name, value } = event.target
     setFormData((prev) => {
       const nextForm = { ...prev, [name]: value }
-
-      if (name === 'roomType' && (!selectedRoom || replaceSeatMap)) {
-        nextForm.layoutTemplate = inferTemplateFromRoomType(value)
-      }
 
       if (name === 'status' && value !== 'MAINTENANCE') {
         nextForm.maintenanceNote = ''
@@ -251,8 +280,8 @@ const ManageRooms = () => {
       maintenanceNote: formData.status === 'MAINTENANCE' ? formData.maintenanceNote.trim() : '',
     }
 
-    if (!selectedRoom || replaceSeatMap) {
-      payload.seatMap = getSeatMapFromTemplate(formData.layoutTemplate)
+    if (!selectedRoom) {
+      payload.seatMap = getSeatMapFromRoomType(formData.roomType)
     }
 
     try {
@@ -273,7 +302,7 @@ const ManageRooms = () => {
       toast.success(data.message)
       resetForm()
       fetchRooms()
-    } catch (error) {
+    } catch {
       toast.error('Không lưu được phòng chiếu.')
     } finally {
       setSaving(false)
@@ -307,7 +336,7 @@ const ManageRooms = () => {
 
       toast.success(data.message)
       fetchRooms()
-    } catch (error) {
+    } catch {
       toast.error('Không cập nhật được trạng thái phòng.')
     }
   }
@@ -333,7 +362,7 @@ const ManageRooms = () => {
 
       toast.success(data.message)
       fetchRooms()
-    } catch (error) {
+    } catch {
       toast.error('Không xóa được phòng chiếu.')
     } finally {
       setDeletingId('')
@@ -349,12 +378,13 @@ const ManageRooms = () => {
           <div className='flex items-center justify-between gap-4'>
             <div>
               <h2 className='text-lg font-medium'>Danh sách phòng</h2>
-              <p className='text-sm text-gray-400'>Trạng thái, sức chứa và ràng buộc khai thác của từng phòng.</p>
+              <p className='text-sm text-gray-400'>Theo dõi trạng thái, sức chứa và thao tác nhanh trên từng phòng.</p>
             </div>
             <button
               onClick={resetForm}
-              className='rounded-lg border border-primary/40 px-4 py-2 text-sm text-primary hover:bg-primary/10'
+              className='inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20'
             >
+              <PlusCircle className='h-4 w-4' />
               Tạo phòng mới
             </button>
           </div>
@@ -372,7 +402,7 @@ const ManageRooms = () => {
                 </tr>
               </thead>
               <tbody>
-                {rooms.map((room) => (
+                {paginatedRooms.map((room) => (
                   <tr key={room._id} className='border-b border-white/5'>
                     <td className='px-3 py-4'>
                       <p className='font-medium text-white'>{room.name}</p>
@@ -400,39 +430,44 @@ const ManageRooms = () => {
                       <div className='flex flex-wrap justify-end gap-2'>
                         <button
                           onClick={() => fetchRoomDetail(room._id)}
-                          className='rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10'
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10'
                         >
+                          <PenSquare className='h-3.5 w-3.5' />
                           Sửa
                         </button>
                         {room.status !== 'MAINTENANCE' && (
                           <button
                             onClick={() => handleQuickStatusUpdate(room, 'MAINTENANCE')}
-                            className='rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10'
+                            className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10'
                           >
+                            <Wrench className='h-3.5 w-3.5' />
                             Bảo trì
                           </button>
                         )}
                         {room.status !== 'INACTIVE' && (
                           <button
                             onClick={() => handleQuickStatusUpdate(room, 'INACTIVE')}
-                            className='rounded-lg border border-gray-500/30 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-500/10'
+                            className='inline-flex items-center gap-1.5 rounded-lg border border-slate-500/30 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-500/10'
                           >
+                            <CirclePause className='h-3.5 w-3.5' />
                             Ngừng
                           </button>
                         )}
                         {room.status !== 'ACTIVE' && (
                           <button
                             onClick={() => handleQuickStatusUpdate(room, 'ACTIVE')}
-                            className='rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10'
+                            className='inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10'
                           >
+                            <CheckCircle2 className='h-3.5 w-3.5' />
                             Mở lại
                           </button>
                         )}
                         <button
                           disabled={deletingId === room._id || room.totalShowsCount > 0}
                           onClick={() => handleDelete(room)}
-                          className='rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
                         >
+                          <Trash2 className='h-3.5 w-3.5' />
                           Xóa
                         </button>
                       </div>
@@ -446,6 +481,40 @@ const ManageRooms = () => {
               <div className='py-8 text-center text-sm text-gray-400'>Chưa có phòng chiếu nào.</div>
             )}
           </div>
+
+          {rooms.length > 0 && (
+            <div className='mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 md:flex-row md:items-center md:justify-between'>
+              <p className='text-sm text-gray-400'>
+                Hiển thị {startRow}-{endRow} trên tổng {rooms.length} phòng
+              </p>
+
+              <div className='flex items-center gap-2 self-end md:self-auto'>
+                <button
+                  type='button'
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
+                >
+                  <ChevronLeft className='h-4 w-4' />
+                  Trước
+                </button>
+
+                <div className='rounded-lg border border-white/10 px-3 py-2 text-sm text-white'>
+                  Trang {currentPage}/{totalPages}
+                </div>
+
+                <button
+                  type='button'
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
+                >
+                  Sau
+                  <ChevronRight className='h-4 w-4' />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className='rounded-2xl border border-white/10 bg-white/5 p-5'>
@@ -455,15 +524,16 @@ const ManageRooms = () => {
               <p className='text-sm text-gray-400'>
                 {selectedRoom
                   ? 'Chỉ sửa sơ đồ ghế khi phòng không còn suất chiếu sắp tới.'
-                  : 'Khởi tạo phòng từ template để đảm bảo seat map đúng chuẩn.'}
+                  : 'Sơ đồ ghế sẽ tự áp theo loại phòng để tránh lệch cấu hình thực tế.'}
               </p>
             </div>
             {selectedRoom && (
               <button
                 type='button'
                 onClick={resetForm}
-                className='rounded-lg border border-white/15 px-3 py-2 text-xs text-gray-300 hover:bg-white/10'
+                className='inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs text-gray-300 hover:bg-white/10'
               >
+                <XCircle className='h-4 w-4' />
                 Bỏ chọn
               </button>
             )}
@@ -528,31 +598,15 @@ const ManageRooms = () => {
               </div>
             )}
 
-            {selectedRoom && (
-              <label className='flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-300'>
-                <input
-                  type='checkbox'
-                  checked={replaceSeatMap}
-                  disabled={!selectedRoom.canEditSeatMap}
-                  onChange={(event) => setReplaceSeatMap(event.target.checked)}
-                />
-                Cập nhật lại sơ đồ ghế theo template
-              </label>
-            )}
-
-            {(!selectedRoom || replaceSeatMap) && (
+            {!selectedRoom && (
               <div>
                 <label className='mb-2 block text-sm text-gray-300'>Template sơ đồ ghế</label>
-                <select
-                  name='layoutTemplate'
-                  value={formData.layoutTemplate}
-                  onChange={handleChange}
-                  className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none'
-                >
-                  <option value='STANDARD'>Standard</option>
-                  <option value='IMAX'>IMAX</option>
-                  <option value='GOLD_CLASS'>Gold Class / Sweetbox</option>
-                </select>
+                <div className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white'>
+                  {templateLabelMap[getTemplateForRoomType(formData.roomType)]}
+                </div>
+                <p className='mt-2 text-xs text-gray-500'>
+                  2D và 3D dùng template Standard, IMAX dùng template IMAX, GOLD_CLASS và SWEETBOX dùng template Gold Class / Sweetbox.
+                </p>
               </div>
             )}
           </div>
@@ -578,8 +632,9 @@ const ManageRooms = () => {
           <button
             type='submit'
             disabled={saving}
-            className='mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60'
+            className='mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60'
           >
+            {selectedRoom ? <Save className='h-4 w-4' /> : <PlusCircle className='h-4 w-4' />}
             {saving ? 'Đang xử lý...' : selectedRoom ? 'Lưu cập nhật phòng' : 'Tạo phòng chiếu'}
           </button>
         </form>
