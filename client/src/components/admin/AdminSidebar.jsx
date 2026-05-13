@@ -49,4 +49,8 @@ const AdminSidebar = () => {
   )
 }
 
+<<<<<<< ours
 export default AdminSidebar
+=======
+export default AdminSidebar
+>>>>>>> theirs

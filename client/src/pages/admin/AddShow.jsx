@@ -34,7 +34,9 @@ const AddShow = () => {
       const { data } = await axios.get('/api/admin/rooms', {
         headers: { Authorization: `Bearer ${await getToken()}` } 
       });
-      if (data.success) setRooms(data.rooms);
+      if (data.success) {
+        setRooms(data.rooms.filter(room => room.status === 'ACTIVE'));
+      }
     } catch (error) { console.error('Lỗi khi tải danh sách phòng chiếu:', error); }
   }
 
@@ -158,7 +160,7 @@ const AddShow = () => {
           <option value="" className='bg-black text-gray-400'>-- Vui lòng chọn một phòng chiếu --</option>
           {rooms.map(room => (
             <option key={room._id} value={room._id} className='bg-black'>
-                {room.name} ({room.roomType})
+                {room.name} ({room.roomType} - {room.capacity} ghe)
             </option>
           ))}
         </select>
