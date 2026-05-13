@@ -6,7 +6,7 @@ export const SEAT_TYPES = ['STANDARD', 'VIP', 'COUPLE', 'EMPTY'];
 
 export const normalizeSeatMap = (seatMap = []) => {
     if (!Array.isArray(seatMap) || seatMap.length === 0) {
-        throw new Error("So do ghe phai la mot mang va khong duoc de trong.");
+        throw new Error("Sơ đồ ghế phải là một mảng và không được để trống.");
     }
 
     const seenRows = new Set();
@@ -16,11 +16,11 @@ export const normalizeSeatMap = (seatMap = []) => {
         const row = `${rowObj?.row || ''}`.trim().toUpperCase();
 
         if (!row) {
-            throw new Error(`Hang ghe tai vi tri ${rowIndex + 1} khong hop le.`);
+            throw new Error(`Hàng ghế tại vị trí ${rowIndex + 1} không hợp lệ.`);
         }
 
         if (seenRows.has(row)) {
-            throw new Error(`Hang ghe ${row} dang bi trung.`);
+            throw new Error(`Hàng ghế ${row} đang bị trùng.`);
         }
 
         seenRows.add(row);
@@ -31,15 +31,15 @@ export const normalizeSeatMap = (seatMap = []) => {
             const seatType = `${seat?.seatType || 'STANDARD'}`.trim().toUpperCase();
 
             if (!seatNumber) {
-                throw new Error(`Ghe tai hang ${row} vi tri ${seatIndex + 1} khong hop le.`);
+                throw new Error(`Ghế tại hàng ${row} vị trí ${seatIndex + 1} không hợp lệ.`);
             }
 
             if (!SEAT_TYPES.includes(seatType)) {
-                throw new Error(`Loai ghe ${seatType} tai ${seatNumber} khong duoc ho tro.`);
+                throw new Error(`Loại ghế ${seatType} tại ${seatNumber} không được hỗ trợ.`);
             }
 
             if (seenSeats.has(seatNumber)) {
-                throw new Error(`Ma ghe ${seatNumber} dang bi trung.`);
+                throw new Error(`Mã ghế ${seatNumber} đang bị trùng.`);
             }
 
             seenSeats.add(seatNumber);
@@ -100,36 +100,28 @@ const roomSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
-roomSchema.pre('validate', function (next) {
-    try {
-        const normalizedSeatMap = normalizeSeatMap(this.seatMap || []);
-        const seatStats = buildSeatLayoutStats(normalizedSeatMap);
+roomSchema.pre('validate', function () {
+    const normalizedSeatMap = normalizeSeatMap(this.seatMap || []);
+    const seatStats = buildSeatLayoutStats(normalizedSeatMap);
 
-        if (seatStats.capacity <= 0) {
-            throw new Error("Phong chieu phai co it nhat mot ghe kha dung.");
-        }
+    if (seatStats.capacity <= 0) {
+        throw new Error("Phòng chiếu phải có ít nhất một ghế khả dụng.");
+    }
 
-        this.seatMap = normalizedSeatMap;
-        this.capacity = seatStats.capacity;
-        this.seatStats = {
-            standard: seatStats.standard,
-            vip: seatStats.vip,
-            couple: seatStats.couple,
-            empty: seatStats.empty,
-            totalRows: seatStats.totalRows
-        };
+    this.seatMap = normalizedSeatMap;
+    this.capacity = seatStats.capacity;
+    this.seatStats = {
+        standard: seatStats.standard,
+        vip: seatStats.vip,
+        couple: seatStats.couple,
+        empty: seatStats.empty,
+        totalRows: seatStats.totalRows
+    };
 
-        if (this.status === 'ACTIVE') {
-            this.maintenanceNote = '';
-        }
-
-        next();
-    } catch (error) {
-        next(error);
+    if (this.status === 'ACTIVE') {
+        this.maintenanceNote = '';
     }
 });
-
-roomSchema.index({ name: 1 }, { unique: true });
 
 const Room = mongoose.model("Room", roomSchema);
 export default Room;

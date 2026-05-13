@@ -160,7 +160,7 @@ const AddShow = () => {
           <option value="" className='bg-black text-gray-400'>-- Vui lòng chọn một phòng chiếu --</option>
           {rooms.map(room => (
             <option key={room._id} value={room._id} className='bg-black'>
-                {room.name} ({room.roomType} - {room.capacity} ghe)
+                {room.name} ({room.roomType} - {room.capacity} ghế)
             </option>
           ))}
         </select>

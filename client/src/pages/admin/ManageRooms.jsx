@@ -130,9 +130,9 @@ const getSeatStats = (seatMap = []) => {
 }
 
 const statusLabel = {
-  ACTIVE: 'Dang khai thac',
-  MAINTENANCE: 'Bao tri',
-  INACTIVE: 'Ngung khai thac',
+  ACTIVE: 'Đang khai thác',
+  MAINTENANCE: 'Bảo trì',
+  INACTIVE: 'Ngừng khai thác',
 }
 
 const ManageRooms = () => {
@@ -158,7 +158,7 @@ const ManageRooms = () => {
         toast.error(data.message)
       }
     } catch (error) {
-      toast.error('Khong tai duoc danh sach phong chieu.')
+      toast.error('Không tải được danh sách phòng chiếu.')
     } finally {
       setLoading(false)
     }
@@ -186,7 +186,7 @@ const ManageRooms = () => {
       })
       setReplaceSeatMap(false)
     } catch (error) {
-      toast.error('Khong tai duoc chi tiet phong chieu.')
+      toast.error('Không tải được chi tiết phòng chiếu.')
     }
   }
 
@@ -218,18 +218,30 @@ const ManageRooms = () => {
 
   const handleChange = (event) => {
     const { name, value } = event.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => {
+      const nextForm = { ...prev, [name]: value }
+
+      if (name === 'roomType' && (!selectedRoom || replaceSeatMap)) {
+        nextForm.layoutTemplate = inferTemplateFromRoomType(value)
+      }
+
+      if (name === 'status' && value !== 'MAINTENANCE') {
+        nextForm.maintenanceNote = ''
+      }
+
+      return nextForm
+    })
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
 
     if (!formData.name.trim()) {
-      return toast.error('Ten phong chieu la bat buoc.')
+      return toast.error('Tên phòng chiếu là bắt buộc.')
     }
 
     if (formData.status === 'MAINTENANCE' && !formData.maintenanceNote.trim()) {
-      return toast.error('Can nhap ly do bao tri.')
+      return toast.error('Cần nhập lý do bảo trì.')
     }
 
     const payload = {
@@ -262,7 +274,7 @@ const ManageRooms = () => {
       resetForm()
       fetchRooms()
     } catch (error) {
-      toast.error('Khong luu duoc phong chieu.')
+      toast.error('Không lưu được phòng chiếu.')
     } finally {
       setSaving(false)
     }
@@ -271,11 +283,11 @@ const ManageRooms = () => {
   const handleQuickStatusUpdate = async (room, status) => {
     try {
       const maintenanceNote = status === 'MAINTENANCE'
-        ? window.prompt('Nhap ly do bao tri cho phong nay:', room.maintenanceNote || '')
+        ? window.prompt('Nhập lý do bảo trì cho phòng này:', room.maintenanceNote || '')
         : ''
 
       if (status === 'MAINTENANCE' && !maintenanceNote?.trim()) {
-        return toast.error('Can nhap ly do bao tri.')
+        return toast.error('Cần nhập lý do bảo trì.')
       }
 
       const { data } = await axios.patch(
@@ -296,12 +308,12 @@ const ManageRooms = () => {
       toast.success(data.message)
       fetchRooms()
     } catch (error) {
-      toast.error('Khong cap nhat duoc trang thai phong.')
+      toast.error('Không cập nhật được trạng thái phòng.')
     }
   }
 
   const handleDelete = async (room) => {
-    const confirmed = window.confirm(`Xoa phong ${room.name}?`)
+    const confirmed = window.confirm(`Xóa phòng ${room.name}?`)
     if (!confirmed) return
 
     try {
@@ -322,7 +334,7 @@ const ManageRooms = () => {
       toast.success(data.message)
       fetchRooms()
     } catch (error) {
-      toast.error('Khong xoa duoc phong chieu.')
+      toast.error('Không xóa được phòng chiếu.')
     } finally {
       setDeletingId('')
     }
@@ -330,20 +342,20 @@ const ManageRooms = () => {
 
   return (
     <div className='space-y-8'>
-      <Title text1='Quan ly' text2='Phong chieu' />
+      <Title text1='Quản lý' text2='Phòng chiếu' />
 
       <div className='grid gap-6 xl:grid-cols-[1.2fr_0.8fr]'>
         <div className='rounded-2xl border border-white/10 bg-white/5 p-5'>
           <div className='flex items-center justify-between gap-4'>
             <div>
-              <h2 className='text-lg font-medium'>Danh sach phong</h2>
-              <p className='text-sm text-gray-400'>Trang thai, suc chua va rang buoc khai thac cua tung phong.</p>
+              <h2 className='text-lg font-medium'>Danh sách phòng</h2>
+              <p className='text-sm text-gray-400'>Trạng thái, sức chứa và ràng buộc khai thác của từng phòng.</p>
             </div>
             <button
               onClick={resetForm}
               className='rounded-lg border border-primary/40 px-4 py-2 text-sm text-primary hover:bg-primary/10'
             >
-              Tao phong moi
+              Tạo phòng mới
             </button>
           </div>
 
@@ -351,12 +363,12 @@ const ManageRooms = () => {
             <table className='min-w-full text-sm'>
               <thead className='text-left text-gray-400'>
                 <tr className='border-b border-white/10'>
-                  <th className='px-3 py-3 font-medium'>Phong</th>
-                  <th className='px-3 py-3 font-medium'>Loai</th>
-                  <th className='px-3 py-3 font-medium'>Trang thai</th>
-                  <th className='px-3 py-3 font-medium'>Suc chua</th>
-                  <th className='px-3 py-3 font-medium'>Suat toi</th>
-                  <th className='px-3 py-3 font-medium text-right'>Tac vu</th>
+                  <th className='px-3 py-3 font-medium'>Phòng</th>
+                  <th className='px-3 py-3 font-medium'>Loại</th>
+                  <th className='px-3 py-3 font-medium'>Trạng thái</th>
+                  <th className='px-3 py-3 font-medium'>Sức chứa</th>
+                  <th className='px-3 py-3 font-medium'>Suất tới</th>
+                  <th className='px-3 py-3 font-medium text-right'>Tác vụ</th>
                 </tr>
               </thead>
               <tbody>
@@ -365,7 +377,7 @@ const ManageRooms = () => {
                     <td className='px-3 py-4'>
                       <p className='font-medium text-white'>{room.name}</p>
                       <p className='text-xs text-gray-500'>
-                        {room.totalShowsCount > 0 ? `Da tung co ${room.totalShowsCount} suat chieu` : 'Chua phat sinh suat chieu'}
+                        {room.totalShowsCount > 0 ? `Đã từng có ${room.totalShowsCount} suất chiếu` : 'Chưa phát sinh suất chiếu'}
                       </p>
                     </td>
                     <td className='px-3 py-4 text-gray-300'>{room.roomType}</td>
@@ -380,9 +392,9 @@ const ManageRooms = () => {
                         {statusLabel[room.status] || room.status}
                       </span>
                     </td>
-                    <td className='px-3 py-4 text-gray-300'>{room.capacity} ghe</td>
+                    <td className='px-3 py-4 text-gray-300'>{room.capacity} ghế</td>
                     <td className='px-3 py-4 text-gray-300'>
-                      {room.futureShowsCount > 0 ? `${room.futureShowsCount} suat` : 'Khong co'}
+                      {room.futureShowsCount > 0 ? `${room.futureShowsCount} suất` : 'Không có'}
                     </td>
                     <td className='px-3 py-4'>
                       <div className='flex flex-wrap justify-end gap-2'>
@@ -390,14 +402,14 @@ const ManageRooms = () => {
                           onClick={() => fetchRoomDetail(room._id)}
                           className='rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10'
                         >
-                          Sua
+                          Sửa
                         </button>
                         {room.status !== 'MAINTENANCE' && (
                           <button
                             onClick={() => handleQuickStatusUpdate(room, 'MAINTENANCE')}
                             className='rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10'
                           >
-                            Bao tri
+                            Bảo trì
                           </button>
                         )}
                         {room.status !== 'INACTIVE' && (
@@ -405,7 +417,7 @@ const ManageRooms = () => {
                             onClick={() => handleQuickStatusUpdate(room, 'INACTIVE')}
                             className='rounded-lg border border-gray-500/30 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-500/10'
                           >
-                            Ngung
+                            Ngừng
                           </button>
                         )}
                         {room.status !== 'ACTIVE' && (
@@ -413,7 +425,7 @@ const ManageRooms = () => {
                             onClick={() => handleQuickStatusUpdate(room, 'ACTIVE')}
                             className='rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10'
                           >
-                            Mo lai
+                            Mở lại
                           </button>
                         )}
                         <button
@@ -421,7 +433,7 @@ const ManageRooms = () => {
                           onClick={() => handleDelete(room)}
                           className='rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
                         >
-                          Xoa
+                          Xóa
                         </button>
                       </div>
                     </td>
@@ -431,7 +443,7 @@ const ManageRooms = () => {
             </table>
 
             {!loading && rooms.length === 0 && (
-              <div className='py-8 text-center text-sm text-gray-400'>Chua co phong chieu nao.</div>
+              <div className='py-8 text-center text-sm text-gray-400'>Chưa có phòng chiếu nào.</div>
             )}
           </div>
         </div>
@@ -439,11 +451,11 @@ const ManageRooms = () => {
         <form onSubmit={handleSubmit} className='rounded-2xl border border-white/10 bg-white/5 p-5'>
           <div className='flex items-center justify-between gap-4'>
             <div>
-              <h2 className='text-lg font-medium'>{selectedRoom ? 'Cap nhat phong' : 'Tao phong moi'}</h2>
+              <h2 className='text-lg font-medium'>{selectedRoom ? 'Cập nhật phòng' : 'Tạo phòng mới'}</h2>
               <p className='text-sm text-gray-400'>
                 {selectedRoom
-                  ? 'Chi sua so do ghe khi phong khong con suat chieu sap toi.'
-                  : 'Khoi tao phong tu template de dam bao seat map dung chuan.'}
+                  ? 'Chỉ sửa sơ đồ ghế khi phòng không còn suất chiếu sắp tới.'
+                  : 'Khởi tạo phòng từ template để đảm bảo seat map đúng chuẩn.'}
               </p>
             </div>
             {selectedRoom && (
@@ -452,14 +464,14 @@ const ManageRooms = () => {
                 onClick={resetForm}
                 className='rounded-lg border border-white/15 px-3 py-2 text-xs text-gray-300 hover:bg-white/10'
               >
-                Bo chon
+                Bỏ chọn
               </button>
             )}
           </div>
 
           <div className='mt-5 space-y-4'>
             <div>
-              <label className='mb-2 block text-sm text-gray-300'>Ten phong</label>
+              <label className='mb-2 block text-sm text-gray-300'>Tên phòng</label>
               <input
                 name='name'
                 value={formData.name}
@@ -471,7 +483,7 @@ const ManageRooms = () => {
 
             <div className='grid gap-4 md:grid-cols-2'>
               <div>
-                <label className='mb-2 block text-sm text-gray-300'>Loai phong</label>
+                <label className='mb-2 block text-sm text-gray-300'>Loại phòng</label>
                 <select
                   name='roomType'
                   value={formData.roomType}
@@ -488,7 +500,7 @@ const ManageRooms = () => {
               </div>
 
               <div>
-                <label className='mb-2 block text-sm text-gray-300'>Trang thai</label>
+                <label className='mb-2 block text-sm text-gray-300'>Trạng thái</label>
                 <select
                   name='status'
                   value={formData.status}
@@ -504,13 +516,13 @@ const ManageRooms = () => {
 
             {formData.status === 'MAINTENANCE' && (
               <div>
-                <label className='mb-2 block text-sm text-gray-300'>Ly do bao tri</label>
+                <label className='mb-2 block text-sm text-gray-300'>Lý do bảo trì</label>
                 <textarea
                   name='maintenanceNote'
                   value={formData.maintenanceNote}
                   onChange={handleChange}
                   rows={3}
-                  placeholder='VD: doi ghe, bao tri may chieu, sua dieu hoa'
+                  placeholder='VD: đổi ghế, bảo trì máy chiếu, sửa điều hòa'
                   className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none'
                 />
               </div>
@@ -524,13 +536,13 @@ const ManageRooms = () => {
                   disabled={!selectedRoom.canEditSeatMap}
                   onChange={(event) => setReplaceSeatMap(event.target.checked)}
                 />
-                Cap nhat lai so do ghe theo template
+                Cập nhật lại sơ đồ ghế theo template
               </label>
             )}
 
             {(!selectedRoom || replaceSeatMap) && (
               <div>
-                <label className='mb-2 block text-sm text-gray-300'>Template so do ghe</label>
+                <label className='mb-2 block text-sm text-gray-300'>Template sơ đồ ghế</label>
                 <select
                   name='layoutTemplate'
                   value={formData.layoutTemplate}
@@ -546,19 +558,19 @@ const ManageRooms = () => {
           </div>
 
           <div className='mt-5 rounded-2xl border border-primary/15 bg-primary/5 p-4'>
-            <p className='text-sm font-medium text-white'>Preview cong suat phong</p>
+            <p className='text-sm font-medium text-white'>Preview công suất phòng</p>
             <div className='mt-3 grid grid-cols-2 gap-3 text-sm text-gray-300'>
-              <div className='rounded-xl bg-black/20 p-3'>Suc chua: <span className='text-white'>{previewStats.capacity}</span></div>
+              <div className='rounded-xl bg-black/20 p-3'>Sức chứa: <span className='text-white'>{previewStats.capacity}</span></div>
               <div className='rounded-xl bg-black/20 p-3'>Standard: <span className='text-white'>{previewStats.standard}</span></div>
               <div className='rounded-xl bg-black/20 p-3'>VIP: <span className='text-white'>{previewStats.vip}</span></div>
               <div className='rounded-xl bg-black/20 p-3'>Couple: <span className='text-white'>{previewStats.couple}</span></div>
             </div>
             <p className='mt-3 text-xs text-gray-400'>
-              O trong so do duoc tinh la khoang di/loi len xuong va khong cong vao suc chua.
+              Ô trống trong sơ đồ được tính là khoảng đi hoặc lối lên xuống và không cộng vào sức chứa.
             </p>
             {selectedRoom?.futureShowsCount > 0 && (
               <p className='mt-2 text-xs text-amber-300'>
-                Phong nay dang co {selectedRoom.futureShowsCount} suat chieu sap toi. Khong duoc doi loai phong, so do ghe hoac dua vao bao tri.
+                Phòng này đang có {selectedRoom.futureShowsCount} suất chiếu sắp tới. Không được đổi loại phòng, sơ đồ ghế hoặc đưa vào bảo trì.
               </p>
             )}
           </div>
@@ -568,7 +580,7 @@ const ManageRooms = () => {
             disabled={saving}
             className='mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60'
           >
-            {saving ? 'Dang xu ly...' : selectedRoom ? 'Luu cap nhat phong' : 'Tao phong chieu'}
+            {saving ? 'Đang xử lý...' : selectedRoom ? 'Lưu cập nhật phòng' : 'Tạo phòng chiếu'}
           </button>
         </form>
       </div>

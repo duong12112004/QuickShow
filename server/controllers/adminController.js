@@ -10,7 +10,7 @@ import Room, {
 
 const buildErrorMessage = (fallbackMessage, error) => {
     if (error?.code === 11000) {
-        return "Ten phong chieu da ton tai trong he thong.";
+        return "Tên phòng chiếu đã tồn tại trong hệ thống.";
     }
 
     return `${fallbackMessage}: ${error.message}`;
@@ -23,7 +23,7 @@ const validateRoomPayload = (body, options = {}) => {
     if (body.name !== undefined || requireName) {
         const name = `${body.name || ''}`.trim();
         if (!name) {
-            throw new Error("Ten phong chieu khong duoc de trong.");
+            throw new Error("Tên phòng chiếu không được để trống.");
         }
         payload.name = name;
     }
@@ -31,7 +31,7 @@ const validateRoomPayload = (body, options = {}) => {
     if (body.roomType !== undefined) {
         const roomType = `${body.roomType || ''}`.trim().toUpperCase();
         if (!ROOM_TYPES.includes(roomType)) {
-            throw new Error("Loai phong chieu khong hop le.");
+            throw new Error("Loại phòng chiếu không hợp lệ.");
         }
         payload.roomType = roomType;
     }
@@ -39,7 +39,7 @@ const validateRoomPayload = (body, options = {}) => {
     if (body.status !== undefined) {
         const status = `${body.status || ''}`.trim().toUpperCase();
         if (!ROOM_STATUSES.includes(status)) {
-            throw new Error("Trang thai phong chieu khong hop le.");
+            throw new Error("Trạng thái phòng chiếu không hợp lệ.");
         }
         payload.status = status;
     }
@@ -48,7 +48,7 @@ const validateRoomPayload = (body, options = {}) => {
         const maintenanceNote = `${body.maintenanceNote || ''}`.trim();
 
         if (payload.status === 'MAINTENANCE' && !maintenanceNote) {
-            throw new Error("Can nhap ly do bao tri khi chuyen phong sang trang thai bao tri.");
+            throw new Error("Cần nhập lý do bảo trì khi chuyển phòng sang trạng thái bảo trì.");
         }
 
         payload.maintenanceNote = maintenanceNote;
@@ -243,7 +243,7 @@ export const getDashboardData = async (req, res) => {
         res.json({ success: true, dashboardData });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai du lieu Dashboard: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải dữ liệu Dashboard: " + error.message });
     }
 };
 
@@ -303,7 +303,7 @@ export const getAllShows = async (req, res) => {
         res.json({ success: true, shows });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai danh sach suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách suất chiếu: " + error.message });
     }
 };
 
@@ -320,12 +320,21 @@ export const getAllBookings = async (req, res) => {
         res.json({ success: true, bookings });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai danh sach dat ve: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách đặt vé: " + error.message });
     }
 };
 
 export const seedCinemaData = async (req, res) => {
     try {
+        const totalShowsCount = await Show.countDocuments();
+
+        if (totalShowsCount > 0) {
+            return res.json({
+                success: false,
+                message: "Không thể seed lại phòng chiếu khi hệ thống đã có suất chiếu. Hãy dùng trên môi trường dev sạch."
+            });
+        }
+
         await Room.deleteMany({});
 
         const roomsToCreate = [
@@ -341,12 +350,12 @@ export const seedCinemaData = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Da khoi tao thanh cong du lieu cho 6 phong chieu.",
+            message: "Đã khởi tạo thành công dữ liệu cho 6 phòng chiếu.",
             rooms: newRooms
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tao du lieu phong chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tạo dữ liệu phòng chiếu: " + error.message });
     }
 };
 
@@ -360,7 +369,7 @@ export const getAllRooms = async (req, res) => {
 
         res.json({ success: true, rooms: roomsWithUsage });
     } catch (error) {
-        res.json({ success: false, message: "Loi khi tai danh sach phong chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách phòng chiếu: " + error.message });
     }
 };
 
@@ -370,7 +379,7 @@ export const getRoomDetail = async (req, res) => {
         const room = await Room.findById(roomId).lean();
 
         if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
+            return res.json({ success: false, message: "Phòng chiếu không tồn tại." });
         }
 
         const usage = await getRoomUsage(roomId);
@@ -388,7 +397,7 @@ export const getRoomDetail = async (req, res) => {
             }
         });
     } catch (error) {
-        res.json({ success: false, message: "Loi khi tai chi tiet phong chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải chi tiết phòng chiếu: " + error.message });
     }
 };
 
@@ -403,12 +412,12 @@ export const createRoom = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Da tao phong chieu thanh cong.",
+            message: "Đã tạo phòng chiếu thành công.",
             room
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: buildErrorMessage("Loi khi tao phong chieu", error) });
+        res.json({ success: false, message: buildErrorMessage("Lỗi khi tạo phòng chiếu", error) });
     }
 };
 
@@ -418,7 +427,7 @@ export const updateRoom = async (req, res) => {
         const room = await Room.findById(roomId);
 
         if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
+            return res.json({ success: false, message: "Phòng chiếu không tồn tại." });
         }
 
         const payload = validateRoomPayload(req.body);
@@ -431,14 +440,14 @@ export const updateRoom = async (req, res) => {
         if ((isSeatMapChanging || isRoomTypeChanging) && usage.futureShowsCount > 0) {
             return res.json({
                 success: false,
-                message: "Khong the sua so do ghe hoac loai phong khi phong dang con suat chieu sap toi."
+                message: "Không thể sửa sơ đồ ghế hoặc loại phòng khi phòng đang còn suất chiếu sắp tới."
             });
         }
 
         if (isPuttingRoomUnavailable && usage.futureShowsCount > 0) {
             return res.json({
                 success: false,
-                message: "Can xu ly hoac huy cac suat chieu sap toi truoc khi dua phong vao bao tri/ngung khai thac."
+                message: "Cần xử lý hoặc hủy các suất chiếu sắp tới trước khi đưa phòng vào bảo trì hoặc ngừng khai thác."
             });
         }
 
@@ -447,12 +456,12 @@ export const updateRoom = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Da cap nhat phong chieu thanh cong.",
+            message: "Đã cập nhật phòng chiếu thành công.",
             room
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: buildErrorMessage("Loi khi cap nhat phong chieu", error) });
+        res.json({ success: false, message: buildErrorMessage("Lỗi khi cập nhật phòng chiếu", error) });
     }
 };
 
@@ -462,13 +471,13 @@ export const updateRoomStatus = async (req, res) => {
         const room = await Room.findById(roomId);
 
         if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
+            return res.json({ success: false, message: "Phòng chiếu không tồn tại." });
         }
 
         const payload = validateRoomPayload(req.body);
 
         if (!payload.status) {
-            return res.json({ success: false, message: "Trang thai phong chieu la truong bat buoc." });
+            return res.json({ success: false, message: "Trạng thái phòng chiếu là trường bắt buộc." });
         }
 
         const usage = await getRoomUsage(roomId);
@@ -476,7 +485,7 @@ export const updateRoomStatus = async (req, res) => {
         if (payload.status !== 'ACTIVE' && payload.status !== room.status && usage.futureShowsCount > 0) {
             return res.json({
                 success: false,
-                message: "Khong the doi trang thai phong khi van con suat chieu sap toi."
+                message: "Không thể đổi trạng thái phòng khi vẫn còn suất chiếu sắp tới."
             });
         }
 
@@ -486,12 +495,12 @@ export const updateRoomStatus = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Da cap nhat trang thai phong chieu thanh cong.",
+            message: "Đã cập nhật trạng thái phòng chiếu thành công.",
             room
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: buildErrorMessage("Loi khi cap nhat trang thai phong chieu", error) });
+        res.json({ success: false, message: buildErrorMessage("Lỗi khi cập nhật trạng thái phòng chiếu", error) });
     }
 };
 
@@ -501,7 +510,7 @@ export const deleteRoom = async (req, res) => {
         const room = await Room.findById(roomId);
 
         if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
+            return res.json({ success: false, message: "Phòng chiếu không tồn tại." });
         }
 
         const usage = await getRoomUsage(roomId);
@@ -509,7 +518,7 @@ export const deleteRoom = async (req, res) => {
         if (usage.totalShowsCount > 0) {
             return res.json({
                 success: false,
-                message: "Khong the xoa phong da tung duoc gan voi suat chieu. Hay chuyen sang INACTIVE de ngung khai thac."
+                message: "Không thể xóa phòng đã từng được gắn với suất chiếu. Hãy chuyển sang INACTIVE để ngừng khai thác."
             });
         }
 
@@ -517,10 +526,10 @@ export const deleteRoom = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Da xoa phong chieu thanh cong."
+            message: "Đã xóa phòng chiếu thành công."
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi xoa phong chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi xóa phòng chiếu: " + error.message });
     }
 };
