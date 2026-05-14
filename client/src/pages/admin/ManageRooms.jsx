@@ -428,13 +428,7 @@ const ManageRooms = () => {
                     </td>
                     <td className='px-3 py-4'>
                       <div className='flex flex-wrap justify-end gap-2'>
-                        <button
-                          onClick={() => fetchRoomDetail(room._id)}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10'
-                        >
-                          <PenSquare className='h-3.5 w-3.5' />
-                          Sửa
-                        </button>
+                        
                         {room.status !== 'MAINTENANCE' && (
                           <button
                             onClick={() => handleQuickStatusUpdate(room, 'MAINTENANCE')}
@@ -462,6 +456,13 @@ const ManageRooms = () => {
                             Mở lại
                           </button>
                         )}
+                        <button
+                          onClick={() => fetchRoomDetail(room._id)}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10'
+                        >
+                          <PenSquare className='h-3.5 w-3.5' />
+                          Sửa
+                        </button>
                         <button
                           disabled={deletingId === room._id || room.totalShowsCount > 0}
                           onClick={() => handleDelete(room)}

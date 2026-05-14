@@ -1,15 +1,19 @@
 import express from "express";
 import { protectAdmin } from "../middleware/auth.js";
 import {
+    cancelShowtime,
+    createShowtime,
     createRoom,
+    deleteShowtime,
     deleteRoom,
     getAllBookings,
     getAllRooms,
-    getAllShows,
+    getAdminShowtimes,
     getDashboardData,
     getRoomDetail,
     isAdmin,
     seedCinemaData,
+    updateShowtime,
     updateRoom,
     updateRoomStatus
 } from "../controllers/adminController.js";
@@ -18,7 +22,12 @@ const adminRouter = express.Router();
 
 adminRouter.get('/is-admin', protectAdmin, isAdmin);
 adminRouter.get('/dashboard', protectAdmin, getDashboardData);
-adminRouter.get('/all-shows', protectAdmin, getAllShows);
+adminRouter.get('/showtimes', protectAdmin, getAdminShowtimes);
+adminRouter.get('/all-shows', protectAdmin, getAdminShowtimes);
+adminRouter.post('/showtimes', protectAdmin, createShowtime);
+adminRouter.put('/showtimes/:showId', protectAdmin, updateShowtime);
+adminRouter.patch('/showtimes/:showId/cancel', protectAdmin, cancelShowtime);
+adminRouter.delete('/showtimes/:showId', protectAdmin, deleteShowtime);
 adminRouter.get('/all-bookings', protectAdmin, getAllBookings);
 adminRouter.get('/seed', protectAdmin, seedCinemaData);
 adminRouter.get('/rooms', protectAdmin, getAllRooms);

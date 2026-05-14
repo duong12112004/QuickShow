@@ -11,10 +11,9 @@ import Footer from './components/Footer'
 import { Toaster } from 'react-hot-toast'
 import Layout from './pages/admin/Layout'
 import DashBoard from './pages/admin/DashBoard'
-import AddShow from './pages/admin/AddShow'
-import ListShows from './pages/admin/ListShows'
 import ListBookings from './pages/admin/ListBookings'
 import ManageRooms from './pages/admin/ManageRooms'
+import ManageShowtimes from './pages/admin/ManageShowtimes'
 
 import { SignIn } from '@clerk/clerk-react'
 import { useAppContext } from './context/AppContext'
@@ -43,8 +42,9 @@ const App = () => {
         )}>
           <Route index element={<DashBoard />} />
           <Route path='rooms' element={<ManageRooms />} />
-          <Route path='add-shows' element={<AddShow />} />
-          <Route path='list-shows' element={<ListShows />} />
+          <Route path='showtimes' element={<ManageShowtimes />} />
+          <Route path='add-shows' element={<ManageShowtimes />} />
+          <Route path='list-shows' element={<ManageShowtimes />} />
           <Route path='list-bookings' element={<ListBookings />} />
         </Route>
       </Routes>

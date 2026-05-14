@@ -1,83 +1,65 @@
 import axios from "axios";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
-import Room from "../models/Room.js";
 import { inngest } from "../inngest/index.js";
+import {
+    assertNoShowtimeOverlap,
+    assertNoLocalShowtimeOverlap,
+    assertShowtimeNotInPast,
+    buildShowtimeSnapshot,
+    ensureMovieExists,
+    ensureRoomIsActive,
+    getShowtimeLifecycle,
+    SHOWTIME_STATUS
+} from "../services/showtimeService.js";
+import { validateCreateShowtimePayload } from "../validators/showtimeValidator.js";
 
 export const getNowPlayingMovies = async (req, res) => {
     try {
-        const { data } = await axios.get('https://api.themoviedb.org/3/movie/now_playing', {
+        const { data } = await axios.get("https://api.themoviedb.org/3/movie/now_playing", {
             headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
         });
 
         res.json({ success: true, movies: data.results });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Lỗi khi lấy danh sách phim từ TMDB: " + error.message });
+        res.json({ success: false, message: "Loi khi lay danh sach phim tu TMDB: " + error.message });
     }
 };
 
 export const addShow = async (req, res) => {
     try {
-        const { movieId, roomId, showsInput, basePrice } = req.body;
+        const { movieId, roomId, basePrice, cleanupMinutes, showtimes } = validateCreateShowtimePayload(req.body);
 
-        const roomExists = await Room.findById(roomId);
-        if (!roomExists) {
-            return res.json({ success: false, message: "Phòng chiếu không tồn tại trong hệ thống." });
-        }
-
-        if (roomExists.status && roomExists.status !== 'ACTIVE') {
-            return res.json({
-                success: false,
-                message: "Phòng chiếu đang bảo trì hoặc ngừng khai thác, không thể tạo suất chiếu."
-            });
-        }
-
-        let movie = await Movie.findById(movieId);
-        if (!movie) {
-            const [movieDetailsResponse, movieCreditsResponse] = await Promise.all([
-                axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
-                    headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
-                }),
-                axios.get(`https://api.themoviedb.org/3/movie/${movieId}/credits`, {
-                    headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
-                })
-            ]);
-
-            const movieApiData = movieDetailsResponse.data;
-            const movieCreditsData = movieCreditsResponse.data;
-
-            movie = await Movie.create({
-                _id: movieId,
-                title: movieApiData.title,
-                overview: movieApiData.overview,
-                poster_path: movieApiData.poster_path,
-                backdrop_path: movieApiData.backdrop_path,
-                genres: movieApiData.genres,
-                casts: movieCreditsData.cast,
-                release_date: movieApiData.release_date,
-                original_language: movieApiData.original_language,
-                tagline: movieApiData.tagline || "",
-                vote_average: movieApiData.vote_average,
-                runtime: movieApiData.runtime
-            });
-        }
+        await ensureRoomIsActive(roomId);
+        const movie = await ensureMovieExists(movieId);
 
         const showsToCreate = [];
 
-        showsInput.forEach((show) => {
-            const showDate = show.date;
-            show.time.forEach((time) => {
-                const dateTimeString = `${showDate}T${time}+07:00`;
-                showsToCreate.push({
-                    movie: movieId,
-                    room: roomId,
-                    showDateTime: new Date(dateTimeString),
-                    basePrice,
-                    occupiedSeats: {}
-                });
+        for (const showDateTime of showtimes) {
+            assertShowtimeNotInPast(showDateTime);
+            assertNoLocalShowtimeOverlap({
+                draftShowtimes: showsToCreate,
+                showDateTime,
+                runtimeMinutes: movie.runtime,
+                cleanupMinutes
             });
-        });
+            await assertNoShowtimeOverlap({
+                roomId,
+                showDateTime,
+                runtimeMinutes: movie.runtime,
+                cleanupMinutes
+            });
+
+            showsToCreate.push(buildShowtimeSnapshot({
+                movieId,
+                roomId,
+                showDateTime,
+                basePrice,
+                runtimeMinutes: movie.runtime,
+                cleanupMinutes
+            }));
+        }
 
         if (showsToCreate.length > 0) {
             await Show.insertMany(showsToCreate);
@@ -88,24 +70,27 @@ export const addShow = async (req, res) => {
             data: { movieTitle: movie.title }
         });
 
-        res.json({ success: true, message: "Thêm suất chiếu thành công." });
+        res.json({ success: true, message: "Them suat chieu thanh cong." });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Lỗi khi thêm suất chiếu: " + error.message });
+        res.json({ success: false, message: "Loi khi them suat chieu: " + error.message });
     }
 };
 
 export const getShows = async (req, res) => {
     try {
-        const shows = await Show.find({ showDateTime: { $gte: new Date() } })
-            .populate('movie')
-            .populate('room')
+        const shows = await Show.find({
+            showDateTime: { $gte: new Date() },
+            status: SHOWTIME_STATUS.SCHEDULED
+        })
+            .populate("movie")
+            .populate("room")
             .sort({ showDateTime: 1 });
 
         const uniqueMoviesMap = new Map();
 
         shows
-            .filter((show) => show.room && (!show.room.status || show.room.status === 'ACTIVE'))
+            .filter((show) => show.room && (!show.room.status || show.room.status === "ACTIVE"))
             .forEach((show) => {
                 uniqueMoviesMap.set(show.movie._id.toString(), show.movie);
             });
@@ -113,7 +98,7 @@ export const getShows = async (req, res) => {
         res.json({ success: true, shows: Array.from(uniqueMoviesMap.values()) });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Lỗi khi tải danh sách phim: " + error.message });
+        res.json({ success: false, message: "Loi khi tai danh sach phim: " + error.message });
     }
 };
 
@@ -123,17 +108,18 @@ export const getShow = async (req, res) => {
 
         const shows = await Show.find({
             movie: movieId,
-            showDateTime: { $gte: new Date() }
-        }).populate('room');
+            showDateTime: { $gte: new Date() },
+            status: SHOWTIME_STATUS.SCHEDULED
+        }).populate("room");
 
         const movie = await Movie.findById(movieId);
         const dateTime = {};
 
         shows
-            .filter((show) => show.room && (!show.room.status || show.room.status === 'ACTIVE'))
+            .filter((show) => show.room && (!show.room.status || show.room.status === "ACTIVE"))
             .forEach((show) => {
-                const date = new Date(show.showDateTime).toLocaleDateString('en-CA', {
-                    timeZone: 'Asia/Ho_Chi_Minh'
+                const date = new Date(show.showDateTime).toLocaleDateString("en-CA", {
+                    timeZone: "Asia/Ho_Chi_Minh"
                 });
 
                 if (!dateTime[date]) {
@@ -149,28 +135,37 @@ export const getShow = async (req, res) => {
 
         res.json({ success: true, movie, dateTime });
     } catch (error) {
-        res.json({ success: false, message: "Lỗi khi tải chi tiết lịch chiếu: " + error.message });
+        res.json({ success: false, message: "Loi khi tai chi tiet lich chieu: " + error.message });
     }
 };
 
 export const getSeatLayoutForShow = async (req, res) => {
     try {
         const { showId } = req.params;
-        const show = await Show.findById(showId).populate('room');
+        const show = await Show.findById(showId).populate("room");
 
         if (!show) {
-            return res.json({ success: false, message: "Suất chiếu không tồn tại." });
+            return res.json({ success: false, message: "Suat chieu khong ton tai." });
         }
 
         if (!show.room) {
-            return res.json({ success: false, message: "Phòng chiếu không tồn tại." });
+            return res.json({ success: false, message: "Phong chieu khong ton tai." });
         }
 
-        if (show.room.status && show.room.status !== 'ACTIVE') {
+        if ((show.status || SHOWTIME_STATUS.SCHEDULED) === SHOWTIME_STATUS.CANCELLED) {
+            return res.json({ success: false, message: "Suat chieu nay da bi huy." });
+        }
+
+        if (show.room.status && show.room.status !== "ACTIVE") {
             return res.json({
                 success: false,
-                message: "Phòng chiếu đang bảo trì hoặc ngừng khai thác."
+                message: "Phong chieu dang bao tri hoac ngung khai thac."
             });
+        }
+
+        const lifecycle = getShowtimeLifecycle(show);
+        if (lifecycle === "ENDED") {
+            return res.json({ success: false, message: "Suat chieu nay da ket thuc." });
         }
 
         const occupiedSeatsArray = show.occupiedSeats ? Object.keys(show.occupiedSeats) : [];
@@ -182,9 +177,11 @@ export const getSeatLayoutForShow = async (req, res) => {
             basePrice: show.basePrice,
             seatMap: show.room.seatMap,
             occupiedSeats: occupiedSeatsArray,
-            heldSeats: heldSeatsArray
+            heldSeats: heldSeatsArray,
+            status: show.status || SHOWTIME_STATUS.SCHEDULED,
+            lifecycle
         });
     } catch (error) {
-        res.json({ success: false, message: "Lỗi khi tải sơ đồ ghế: " + error.message });
+        res.json({ success: false, message: "Loi khi tai so do ghe: " + error.message });
     }
 };

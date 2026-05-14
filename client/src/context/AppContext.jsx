@@ -95,6 +95,7 @@ export const AppProvider = ({ children }) => {
     const value = {
         axios,
         fetchIsAdmin,
+        fetchShows,
         user,
         getToken,
         navigate,
