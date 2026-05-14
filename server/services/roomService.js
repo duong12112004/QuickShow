@@ -1,5 +1,5 @@
 import Show from "../models/Show.js";
-import { SHOWTIME_STATUS } from "./showtimeService.js";
+import { buildScheduledShowtimeFilter, SHOWTIME_STATUS } from "./showtimeService.js";
 
 export const ROOM_TYPES = ['2D', '3D', 'IMAX', 'GOLD_CLASS', 'SWEETBOX'];
 export const ROOM_STATUSES = ['ACTIVE', 'MAINTENANCE', 'INACTIVE'];
@@ -257,8 +257,8 @@ export const getRoomUsage = async (roomId) => {
 
     const [totalShowsCount, futureShowsCount, nextShow] = await Promise.all([
         Show.countDocuments({ room: roomId }),
-        Show.countDocuments({ room: roomId, showDateTime: { $gte: now }, status: SHOWTIME_STATUS.SCHEDULED }),
-        Show.findOne({ room: roomId, showDateTime: { $gte: now }, status: SHOWTIME_STATUS.SCHEDULED })
+        Show.countDocuments({ room: roomId, showDateTime: { $gte: now }, ...buildScheduledShowtimeFilter() }),
+        Show.findOne({ room: roomId, showDateTime: { $gte: now }, ...buildScheduledShowtimeFilter() })
             .sort({ showDateTime: 1 })
             .select("showDateTime")
             .lean()
@@ -277,7 +277,7 @@ export const enrichRoomsWithUsage = async (rooms) => {
 
     const [futureShows, totalShows] = await Promise.all([
         Show.aggregate([
-            { $match: { room: { $in: roomIds }, showDateTime: { $gte: now }, status: SHOWTIME_STATUS.SCHEDULED } },
+            { $match: { room: { $in: roomIds }, showDateTime: { $gte: now }, ...buildScheduledShowtimeFilter() } },
             {
                 $group: {
                     _id: "$room",

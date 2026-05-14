@@ -9,6 +9,14 @@ export const SHOWTIME_STATUS = {
     CANCELLED: "CANCELLED"
 };
 
+export const buildScheduledShowtimeFilter = () => ({
+    $or: [
+        { status: SHOWTIME_STATUS.SCHEDULED },
+        { status: { $exists: false } },
+        { status: null }
+    ]
+});
+
 export const calculateShowtimeEnd = (showDateTime, runtimeMinutes, cleanupMinutes = DEFAULT_CLEANUP_MINUTES) => {
     const start = new Date(showDateTime);
     return new Date(start.getTime() + (Number(runtimeMinutes) + Number(cleanupMinutes)) * 60 * 1000);

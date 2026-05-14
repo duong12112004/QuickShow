@@ -2,6 +2,7 @@ import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
 import Room from "../models/Room.js";
+import { inngest } from "../inngest/index.js";
 import {
     buildRoomErrorMessage,
     buildSeatLayoutStats,
@@ -14,6 +15,7 @@ import {
     assertNoShowtimeOverlap,
     assertNoLocalShowtimeOverlap,
     assertShowtimeNotInPast,
+    buildScheduledShowtimeFilter,
     buildShowtimeSnapshot,
     ensureMovieExists,
     ensureRoomIsActive,
@@ -71,7 +73,7 @@ export const getDashboardData = async (req, res) => {
 
         const activeShows = await Show.find({
             showDateTime: { $gte: new Date() },
-            status: SHOWTIME_STATUS.SCHEDULED
+            ...buildScheduledShowtimeFilter()
         })
             .populate("movie")
             .sort({ showDateTime: 1 });
@@ -153,6 +155,11 @@ export const createShowtime = async (req, res) => {
         }
 
         const created = await Show.insertMany(docs);
+
+        await inngest.send({
+            name: "app/show.added",
+            data: { movieTitle: movie.title }
+        });
 
         res.json({
             success: true,
@@ -247,6 +254,18 @@ export const cancelShowtime = async (req, res) => {
         const lifecycle = getShowtimeLifecycle(showtime);
         if (lifecycle === "ENDED") {
             return res.json({ success: false, message: "Khong the huy suat chieu da ket thuc." });
+        }
+
+        const paidBookingsCount = await Booking.countDocuments({
+            show: showtime._id,
+            isPaid: true
+        });
+
+        if (paidBookingsCount > 0) {
+            return res.json({
+                success: false,
+                message: "Khong the huy suat chieu da co ve thanh toan."
+            });
         }
 
         showtime.status = SHOWTIME_STATUS.CANCELLED;

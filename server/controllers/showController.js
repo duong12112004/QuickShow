@@ -6,6 +6,7 @@ import {
     assertNoShowtimeOverlap,
     assertNoLocalShowtimeOverlap,
     assertShowtimeNotInPast,
+    buildScheduledShowtimeFilter,
     buildShowtimeSnapshot,
     ensureMovieExists,
     ensureRoomIsActive,
@@ -81,7 +82,7 @@ export const getShows = async (req, res) => {
     try {
         const shows = await Show.find({
             showDateTime: { $gte: new Date() },
-            status: SHOWTIME_STATUS.SCHEDULED
+            ...buildScheduledShowtimeFilter()
         })
             .populate("movie")
             .populate("room")
@@ -109,7 +110,7 @@ export const getShow = async (req, res) => {
         const shows = await Show.find({
             movie: movieId,
             showDateTime: { $gte: new Date() },
-            status: SHOWTIME_STATUS.SCHEDULED
+            ...buildScheduledShowtimeFilter()
         }).populate("room");
 
         const movie = await Movie.findById(movieId);

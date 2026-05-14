@@ -560,13 +560,13 @@ const ManageRooms = () => {
                   value={formData.roomType}
                   onChange={handleChange}
                   disabled={selectedRoom?.canEditSeatMap === false}
-                  className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none disabled:cursor-not-allowed disabled:opacity-50'
+                  className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-50'
                 >
-                  <option value='2D'>2D</option>
-                  <option value='3D'>3D</option>
-                  <option value='IMAX'>IMAX</option>
-                  <option value='GOLD_CLASS'>GOLD_CLASS</option>
-                  <option value='SWEETBOX'>SWEETBOX</option>
+                  <option value='2D' className='bg-slate-950 text-white'>2D</option>
+                  <option value='3D' className='bg-slate-950 text-white'>3D</option>
+                  <option value='IMAX' className='bg-slate-950 text-white'>IMAX</option>
+                  <option value='GOLD_CLASS' className='bg-slate-950 text-white'>GOLD_CLASS</option>
+                  <option value='SWEETBOX' className='bg-slate-950 text-white'>SWEETBOX</option>
                 </select>
               </div>
 
@@ -576,11 +576,11 @@ const ManageRooms = () => {
                   name='status'
                   value={formData.status}
                   onChange={handleChange}
-                  className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none'
+                  className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none'
                 >
-                  <option value='ACTIVE'>ACTIVE</option>
-                  <option value='MAINTENANCE'>MAINTENANCE</option>
-                  <option value='INACTIVE'>INACTIVE</option>
+                  <option value='ACTIVE' className='bg-slate-950 text-white'>ACTIVE</option>
+                  <option value='MAINTENANCE' className='bg-slate-950 text-white'>MAINTENANCE</option>
+                  <option value='INACTIVE' className='bg-slate-950 text-white'>INACTIVE</option>
                 </select>
               </div>
             </div>
