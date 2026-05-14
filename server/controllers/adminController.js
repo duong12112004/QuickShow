@@ -1,16 +1,7 @@
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
-import Room from "../models/Room.js";
 import { inngest } from "../inngest/index.js";
-import {
-    buildRoomErrorMessage,
-    buildSeatLayoutStats,
-    enrichRoomsWithUsage,
-    generateSeatMapByRoomType,
-    getRoomUsage,
-    validateRoomPayload
-} from "../services/roomService.js";
 import {
     assertNoShowtimeOverlap,
     assertNoLocalShowtimeOverlap,
@@ -22,13 +13,11 @@ import {
     getShowtimeLifecycle,
     hasBookingsOrHeldSeats,
     SHOWTIME_STATUS,
-    serializeAdminShowtime
-} from "../services/showtimeService.js";
-import {
+    serializeAdminShowtime,
     validateCancelShowtimePayload,
     validateCreateShowtimePayload,
     validateUpdateShowtimePayload
-} from "../validators/showtimeValidator.js";
+} from "../services/showtimeService.js";
 
 export const isAdmin = async (req, res) => {
     res.json({ success: true, isAdmin: true });
@@ -90,7 +79,7 @@ export const getDashboardData = async (req, res) => {
         res.json({ success: true, dashboardData });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai du lieu dashboard: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải dữ liệu dashboard: " + error.message });
     }
 };
 
@@ -116,7 +105,7 @@ export const getAdminShowtimes = async (req, res) => {
         res.json({ success: true, showtimes: items });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai danh sach suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách suất chiếu: " + error.message });
     }
 };
 
@@ -163,12 +152,12 @@ export const createShowtime = async (req, res) => {
 
         res.json({
             success: true,
-            message: docs.length > 1 ? "Da tao cac suat chieu thanh cong." : "Da tao suat chieu thanh cong.",
+            message: docs.length > 1 ? "Đã tạo các suất chiếu thành công." : "Đã tạo suất chiếu thành công.",
             showtimes: created
         });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tao suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tạo suất chiếu: " + error.message });
     }
 };
 
@@ -179,22 +168,22 @@ export const updateShowtime = async (req, res) => {
         const showtime = await Show.findById(showId).populate("movie").populate("room");
 
         if (!showtime) {
-            return res.json({ success: false, message: "Suat chieu khong ton tai." });
+            return res.json({ success: false, message: "Suất chiếu không tồn tại." });
         }
 
         if ((showtime.status || SHOWTIME_STATUS.SCHEDULED) === SHOWTIME_STATUS.CANCELLED) {
-            return res.json({ success: false, message: "Suat chieu da huy khong the chinh sua." });
+            return res.json({ success: false, message: "Suất chiếu đã hủy, không thể chỉnh sửa." });
         }
 
         const lifecycle = getShowtimeLifecycle(showtime);
         if (lifecycle !== "UPCOMING") {
-            return res.json({ success: false, message: "Chi co the sua suat chieu sap toi." });
+            return res.json({ success: false, message: "Chỉ có thể sửa suất chiếu sắp tới." });
         }
 
         if (hasBookingsOrHeldSeats(showtime)) {
             return res.json({
                 success: false,
-                message: "Suat chieu da co ve ban ra hoac dang giu cho. Hay huy suat thay vi chinh sua."
+                message: "Suất chiếu đã có vé bán ra hoặc đang giữ chỗ. Hãy hủy suất thay vì chỉnh sửa."
             });
         }
 
@@ -230,10 +219,10 @@ export const updateShowtime = async (req, res) => {
         showtime.basePrice = basePrice;
         await showtime.save();
 
-        res.json({ success: true, message: "Da cap nhat suat chieu thanh cong." });
+        res.json({ success: true, message: "Đã cập nhật suất chiếu thành công." });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi cap nhat suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi cập nhật suất chiếu: " + error.message });
     }
 };
 
@@ -244,16 +233,16 @@ export const cancelShowtime = async (req, res) => {
         const showtime = await Show.findById(showId);
 
         if (!showtime) {
-            return res.json({ success: false, message: "Suat chieu khong ton tai." });
+            return res.json({ success: false, message: "Suất chiếu không tồn tại." });
         }
 
         if ((showtime.status || SHOWTIME_STATUS.SCHEDULED) === SHOWTIME_STATUS.CANCELLED) {
-            return res.json({ success: false, message: "Suat chieu nay da duoc huy truoc do." });
+            return res.json({ success: false, message: "Suất chiếu này đã được hủy trước đó." });
         }
 
         const lifecycle = getShowtimeLifecycle(showtime);
         if (lifecycle === "ENDED") {
-            return res.json({ success: false, message: "Khong the huy suat chieu da ket thuc." });
+            return res.json({ success: false, message: "Không thể hủy suất chiếu đã kết thúc." });
         }
 
         const paidBookingsCount = await Booking.countDocuments({
@@ -264,7 +253,7 @@ export const cancelShowtime = async (req, res) => {
         if (paidBookingsCount > 0) {
             return res.json({
                 success: false,
-                message: "Khong the huy suat chieu da co ve thanh toan."
+                message: "Không thể hủy suất chiếu đã có vé thanh toán."
             });
         }
 
@@ -275,10 +264,10 @@ export const cancelShowtime = async (req, res) => {
         showtime.markModified("heldSeats");
         await showtime.save();
 
-        res.json({ success: true, message: "Da huy suat chieu thanh cong." });
+        res.json({ success: true, message: "Đã hủy suất chiếu thành công." });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi huy suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi hủy suất chiếu: " + error.message });
     }
 };
 
@@ -288,27 +277,27 @@ export const deleteShowtime = async (req, res) => {
         const showtime = await Show.findById(showId);
 
         if (!showtime) {
-            return res.json({ success: false, message: "Suat chieu khong ton tai." });
+            return res.json({ success: false, message: "Suất chiếu không tồn tại." });
         }
 
         if (hasBookingsOrHeldSeats(showtime)) {
             return res.json({
                 success: false,
-                message: "Khong the xoa suat chieu da co ve ban ra hoac dang giu cho."
+                message: "Không thể xóa suất chiếu đã có vé bán ra hoặc đang giữ chỗ."
             });
         }
 
         const lifecycle = getShowtimeLifecycle(showtime);
         if (lifecycle !== "UPCOMING" && lifecycle !== "CANCELLED") {
-            return res.json({ success: false, message: "Chi co the xoa suat chieu chua dien ra." });
+            return res.json({ success: false, message: "Chỉ có thể xóa suất chiếu chưa diễn ra." });
         }
 
         await Show.findByIdAndDelete(showId);
 
-        res.json({ success: true, message: "Da xoa suat chieu thanh cong." });
+        res.json({ success: true, message: "Đã xóa suất chiếu thành công." });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi xoa suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi xóa suất chiếu: " + error.message });
     }
 };
 
@@ -325,224 +314,6 @@ export const getAllBookings = async (req, res) => {
         res.json({ success: true, bookings });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai danh sach dat ve: " + error.message });
-    }
-};
-
-export const seedCinemaData = async (req, res) => {
-    try {
-        const totalShowsCount = await Show.countDocuments();
-
-        if (totalShowsCount > 0) {
-            return res.json({
-                success: false,
-                message: "Khong the seed lai phong chieu khi he thong da co suat chieu. Hay dung tren moi truong dev sach."
-            });
-        }
-
-        await Room.deleteMany({});
-
-        const roomTypesToSeed = [
-            { name: "Cinema 1", roomType: "2D" },
-            { name: "Cinema 2", roomType: "2D" },
-            { name: "Cinema 3", roomType: "3D" },
-            { name: "IMAX 4", roomType: "IMAX" },
-            { name: "Gold Class 5", roomType: "GOLD_CLASS" },
-            { name: "Sweetbox 6", roomType: "SWEETBOX" }
-        ];
-
-        const roomsToCreate = roomTypesToSeed.map((room) => ({
-            ...room,
-            seatMap: generateSeatMapByRoomType(room.roomType)
-        }));
-
-        const newRooms = await Room.insertMany(roomsToCreate);
-
-        res.json({
-            success: true,
-            message: "Da khoi tao thanh cong du lieu cho 6 phong chieu.",
-            rooms: newRooms
-        });
-    } catch (error) {
-        console.error(error);
-        res.json({ success: false, message: "Loi khi tao du lieu phong chieu: " + error.message });
-    }
-};
-
-export const getAllRooms = async (req, res) => {
-    try {
-        const rooms = await Room.find({})
-            .sort({ name: 1 })
-            .lean();
-
-        const roomsWithUsage = await enrichRoomsWithUsage(rooms);
-
-        res.json({ success: true, rooms: roomsWithUsage });
-    } catch (error) {
-        res.json({ success: false, message: "Loi khi tai danh sach phong chieu: " + error.message });
-    }
-};
-
-export const getRoomDetail = async (req, res) => {
-    try {
-        const { roomId } = req.params;
-        const room = await Room.findById(roomId).lean();
-
-        if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
-        }
-
-        const usage = await getRoomUsage(roomId);
-
-        res.json({
-            success: true,
-            room: {
-                ...room,
-                status: room.status || "ACTIVE",
-                maintenanceNote: room.maintenanceNote || "",
-                capacity: room.capacity ?? buildSeatLayoutStats(room.seatMap || []).capacity,
-                ...usage,
-                canEditSeatMap: usage.futureShowsCount === 0,
-                canDelete: usage.totalShowsCount === 0
-            }
-        });
-    } catch (error) {
-        res.json({ success: false, message: "Loi khi tai chi tiet phong chieu: " + error.message });
-    }
-};
-
-export const createRoom = async (req, res) => {
-    try {
-        const payload = validateRoomPayload(req.body, { requireName: true });
-        payload.seatMap = generateSeatMapByRoomType(payload.roomType || "2D");
-
-        const room = await Room.create(payload);
-
-        res.json({
-            success: true,
-            message: "Da tao phong chieu thanh cong.",
-            room
-        });
-    } catch (error) {
-        console.error(error);
-        res.json({ success: false, message: buildRoomErrorMessage("Loi khi tao phong chieu", error) });
-    }
-};
-
-export const updateRoom = async (req, res) => {
-    try {
-        const { roomId } = req.params;
-        const room = await Room.findById(roomId);
-
-        if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
-        }
-
-        const payload = validateRoomPayload(req.body);
-        const usage = await getRoomUsage(roomId);
-
-        const isSeatMapChanging = req.body.seatMap !== undefined;
-        const isRoomTypeChanging = payload.roomType && payload.roomType !== room.roomType;
-        const isPuttingRoomUnavailable = payload.status && payload.status !== "ACTIVE" && payload.status !== room.status;
-        const shouldRegenerateSeatMap = isSeatMapChanging || isRoomTypeChanging;
-
-        if (shouldRegenerateSeatMap && usage.futureShowsCount > 0) {
-            return res.json({
-                success: false,
-                message: "Khong the sua so do ghe hoac loai phong khi phong dang con suat chieu sap toi."
-            });
-        }
-
-        if (isPuttingRoomUnavailable && usage.futureShowsCount > 0) {
-            return res.json({
-                success: false,
-                message: "Can xu ly hoac huy cac suat chieu sap toi truoc khi dua phong vao bao tri hoac ngung khai thac."
-            });
-        }
-
-        if (shouldRegenerateSeatMap) {
-            payload.seatMap = generateSeatMapByRoomType(payload.roomType || room.roomType);
-        }
-
-        Object.assign(room, payload);
-        await room.save();
-
-        res.json({
-            success: true,
-            message: "Da cap nhat phong chieu thanh cong.",
-            room
-        });
-    } catch (error) {
-        console.error(error);
-        res.json({ success: false, message: buildRoomErrorMessage("Loi khi cap nhat phong chieu", error) });
-    }
-};
-
-export const updateRoomStatus = async (req, res) => {
-    try {
-        const { roomId } = req.params;
-        const room = await Room.findById(roomId);
-
-        if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
-        }
-
-        const payload = validateRoomPayload(req.body);
-
-        if (!payload.status) {
-            return res.json({ success: false, message: "Trang thai phong chieu la truong bat buoc." });
-        }
-
-        const usage = await getRoomUsage(roomId);
-
-        if (payload.status !== "ACTIVE" && payload.status !== room.status && usage.futureShowsCount > 0) {
-            return res.json({
-                success: false,
-                message: "Khong the doi trang thai phong khi van con suat chieu sap toi."
-            });
-        }
-
-        room.status = payload.status;
-        room.maintenanceNote = payload.maintenanceNote || "";
-        await room.save();
-
-        res.json({
-            success: true,
-            message: "Da cap nhat trang thai phong chieu thanh cong.",
-            room
-        });
-    } catch (error) {
-        console.error(error);
-        res.json({ success: false, message: buildRoomErrorMessage("Loi khi cap nhat trang thai phong chieu", error) });
-    }
-};
-
-export const deleteRoom = async (req, res) => {
-    try {
-        const { roomId } = req.params;
-        const room = await Room.findById(roomId);
-
-        if (!room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
-        }
-
-        const usage = await getRoomUsage(roomId);
-
-        if (usage.totalShowsCount > 0) {
-            return res.json({
-                success: false,
-                message: "Khong the xoa phong da tung duoc gan voi suat chieu. Hay chuyen sang INACTIVE de ngung khai thac."
-            });
-        }
-
-        await Room.findByIdAndDelete(roomId);
-
-        res.json({
-            success: true,
-            message: "Da xoa phong chieu thanh cong."
-        });
-    } catch (error) {
-        console.error(error);
-        res.json({ success: false, message: "Loi khi xoa phong chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách đặt vé: " + error.message });
     }
 };

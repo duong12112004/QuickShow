@@ -3,20 +3,22 @@ import { protectAdmin } from "../middleware/auth.js";
 import {
     cancelShowtime,
     createShowtime,
-    createRoom,
     deleteShowtime,
-    deleteRoom,
     getAllBookings,
-    getAllRooms,
     getAdminShowtimes,
     getDashboardData,
-    getRoomDetail,
     isAdmin,
-    seedCinemaData,
     updateShowtime,
+} from "../controllers/adminController.js";
+import {
+    createRoom,
+    deleteRoom,
+    getAllRooms,
+    getRoomDetail,
+    seedCinemaData,
     updateRoom,
     updateRoomStatus
-} from "../controllers/adminController.js";
+} from "../controllers/roomController.js";
 
 const adminRouter = express.Router();
 

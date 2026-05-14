@@ -8,19 +8,19 @@ const getBookableShowtime = async (showId) => {
     const showData = await Show.findById(showId).populate("movie").populate("room");
 
     if (!showData || !showData.room) {
-        throw new Error("Loi truy xuat du lieu suat chieu hoac phong.");
+        throw new Error("Lỗi truy xuất dữ liệu suất chiếu hoặc phòng.");
     }
 
     if ((showData.status || SHOWTIME_STATUS.SCHEDULED) !== SHOWTIME_STATUS.SCHEDULED) {
-        throw new Error("Suat chieu nay khong con mo ban.");
+        throw new Error("Suất chiếu này không còn mở bán.");
     }
 
     if (showData.room.status && showData.room.status !== "ACTIVE") {
-        throw new Error("Phong chieu hien khong kha dung.");
+        throw new Error("Phòng chiếu hiện không khả dụng.");
     }
 
     if (getShowtimeLifecycle(showData) !== "UPCOMING") {
-        throw new Error("Da qua thoi gian dat ve cho suat chieu nay.");
+        throw new Error("Đã qua thời gian đặt vé cho suất chiếu này.");
     }
 
     return showData;
@@ -48,7 +48,7 @@ export const createBooking = async (req, res) => {
 
         const isAvailable = await checkSeatsAvailability(showId, selectedSeats);
         if (!isAvailable) {
-            return res.json({ success: false, message: "Ghe ban chon da co nguoi dat, dang duoc giu, hoac suat chieu khong con kha dung." });
+            return res.json({ success: false, message: "Ghế bạn chọn đã có người đặt, đang được giữ, hoặc suất chiếu không còn khả dụng." });
         }
 
         const showData = await getBookableShowtime(showId);
@@ -114,7 +114,7 @@ export const createBooking = async (req, res) => {
         res.json({ success: true, url: session.url });
     } catch (error) {
         console.log(error.message);
-        res.json({ success: false, message: "Da xay ra loi trong qua trinh dat ve: " + error.message });
+        res.json({ success: false, message: "Đã xảy ra lỗi trong quá trình đặt vé: " + error.message });
     }
 };
 
@@ -124,17 +124,17 @@ export const getOccupiedSeats = async (req, res) => {
         const showData = await Show.findById(showId);
 
         if (!showData) {
-            return res.json({ success: false, message: "Suat chieu khong ton tai." });
+            return res.json({ success: false, message: "Suất chiếu không tồn tại." });
         }
 
         if ((showData.status || SHOWTIME_STATUS.SCHEDULED) !== SHOWTIME_STATUS.SCHEDULED) {
-            return res.json({ success: false, message: "Suat chieu nay khong con mo ban." });
+            return res.json({ success: false, message: "Suất chiếu này không còn mở bán." });
         }
 
         const occupiedSeats = Object.keys(showData.occupiedSeats || {});
         res.json({ success: true, occupiedSeats });
     } catch (error) {
         console.log(error.message);
-        res.json({ success: false, message: "Loi khi lay du lieu ghe ngoi: " + error.message });
+        res.json({ success: false, message: "Lỗi khi lấy dữ liệu ghế ngồi: " + error.message });
     }
 };

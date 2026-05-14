@@ -11,9 +11,9 @@ import {
     ensureMovieExists,
     ensureRoomIsActive,
     getShowtimeLifecycle,
-    SHOWTIME_STATUS
+    SHOWTIME_STATUS,
+    validateCreateShowtimePayload
 } from "../services/showtimeService.js";
-import { validateCreateShowtimePayload } from "../validators/showtimeValidator.js";
 
 export const getNowPlayingMovies = async (req, res) => {
     try {
@@ -24,7 +24,7 @@ export const getNowPlayingMovies = async (req, res) => {
         res.json({ success: true, movies: data.results });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi lay danh sach phim tu TMDB: " + error.message });
+        res.json({ success: false, message: "Lỗi khi lấy danh sách phim từ TMDB: " + error.message });
     }
 };
 
@@ -71,10 +71,10 @@ export const addShow = async (req, res) => {
             data: { movieTitle: movie.title }
         });
 
-        res.json({ success: true, message: "Them suat chieu thanh cong." });
+        res.json({ success: true, message: "Thêm suất chiếu thành công." });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi them suat chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi thêm suất chiếu: " + error.message });
     }
 };
 
@@ -99,7 +99,7 @@ export const getShows = async (req, res) => {
         res.json({ success: true, shows: Array.from(uniqueMoviesMap.values()) });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: "Loi khi tai danh sach phim: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải danh sách phim: " + error.message });
     }
 };
 
@@ -136,7 +136,7 @@ export const getShow = async (req, res) => {
 
         res.json({ success: true, movie, dateTime });
     } catch (error) {
-        res.json({ success: false, message: "Loi khi tai chi tiet lich chieu: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải chi tiết lịch chiếu: " + error.message });
     }
 };
 
@@ -146,27 +146,27 @@ export const getSeatLayoutForShow = async (req, res) => {
         const show = await Show.findById(showId).populate("room");
 
         if (!show) {
-            return res.json({ success: false, message: "Suat chieu khong ton tai." });
+            return res.json({ success: false, message: "Suất chiếu không tồn tại." });
         }
 
         if (!show.room) {
-            return res.json({ success: false, message: "Phong chieu khong ton tai." });
+            return res.json({ success: false, message: "Phòng chiếu không tồn tại." });
         }
 
         if ((show.status || SHOWTIME_STATUS.SCHEDULED) === SHOWTIME_STATUS.CANCELLED) {
-            return res.json({ success: false, message: "Suat chieu nay da bi huy." });
+            return res.json({ success: false, message: "Suất chiếu này đã bị hủy." });
         }
 
         if (show.room.status && show.room.status !== "ACTIVE") {
             return res.json({
                 success: false,
-                message: "Phong chieu dang bao tri hoac ngung khai thac."
+                message: "Phòng chiếu đang bảo trì hoặc ngừng khai thác."
             });
         }
 
         const lifecycle = getShowtimeLifecycle(show);
         if (lifecycle === "ENDED") {
-            return res.json({ success: false, message: "Suat chieu nay da ket thuc." });
+            return res.json({ success: false, message: "Suất chiếu này đã kết thúc." });
         }
 
         const occupiedSeatsArray = show.occupiedSeats ? Object.keys(show.occupiedSeats) : [];
@@ -183,6 +183,6 @@ export const getSeatLayoutForShow = async (req, res) => {
             lifecycle
         });
     } catch (error) {
-        res.json({ success: false, message: "Loi khi tai so do ghe: " + error.message });
+        res.json({ success: false, message: "Lỗi khi tải sơ đồ ghế: " + error.message });
     }
 };

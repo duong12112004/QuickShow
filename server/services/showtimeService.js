@@ -9,6 +9,131 @@ export const SHOWTIME_STATUS = {
     CANCELLED: "CANCELLED"
 };
 
+const parsePositiveNumber = (value, fieldName) => {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+        throw new Error(`${fieldName} phải là số lớn hơn 0.`);
+    }
+
+    return numericValue;
+};
+
+const parseNonNegativeInteger = (value, fieldName) => {
+    const numericValue = Number(value);
+
+    if (!Number.isInteger(numericValue) || numericValue < 0) {
+        throw new Error(`${fieldName} phải là số nguyên không âm.`);
+    }
+
+    return numericValue;
+};
+
+const parseShowDateTime = (value) => {
+    if (!value) {
+        throw new Error("Thời gian chiếu là trường bắt buộc.");
+    }
+
+    const parsedDate = new Date(value);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+        throw new Error("Thời gian chiếu không hợp lệ.");
+    }
+
+    return parsedDate;
+};
+
+export const normalizeLegacyShowsInput = (showsInput = []) => {
+    if (!Array.isArray(showsInput) || showsInput.length === 0) {
+        throw new Error("Danh sách mốc chiếu không hợp lệ.");
+    }
+
+    return showsInput.flatMap((show) => {
+        const date = `${show?.date || ""}`.trim();
+        const times = Array.isArray(show?.time) ? show.time : [];
+
+        return times.map((time) => {
+            const normalizedTime = `${time || ""}`.trim();
+
+            if (!date || !normalizedTime) {
+                throw new Error("Danh sách mốc chiếu không hợp lệ.");
+            }
+
+            return parseShowDateTime(`${date}T${normalizedTime}+07:00`);
+        });
+    });
+};
+
+export const validateCreateShowtimePayload = (body) => {
+    const movieId = `${body.movieId || ""}`.trim();
+    const roomId = `${body.roomId || ""}`.trim();
+
+    if (!movieId) {
+        throw new Error("Phim là trường bắt buộc.");
+    }
+
+    if (!roomId) {
+        throw new Error("Phòng chiếu là trường bắt buộc.");
+    }
+
+    const basePrice = parsePositiveNumber(body.basePrice, "Giá vé");
+    const cleanupMinutes = body.cleanupMinutes === undefined || body.cleanupMinutes === ""
+        ? DEFAULT_CLEANUP_MINUTES
+        : parseNonNegativeInteger(body.cleanupMinutes, "Thời gian dọn phòng");
+
+    const showtimes = body.showDateTime
+        ? [parseShowDateTime(body.showDateTime)]
+        : normalizeLegacyShowsInput(body.showsInput);
+
+    return {
+        movieId,
+        roomId,
+        basePrice,
+        cleanupMinutes,
+        showtimes
+    };
+};
+
+export const validateUpdateShowtimePayload = (body) => {
+    const payload = {};
+
+    if (body.movieId !== undefined) {
+        const movieId = `${body.movieId || ""}`.trim();
+        if (!movieId) throw new Error("Phim là trường bắt buộc.");
+        payload.movieId = movieId;
+    }
+
+    if (body.roomId !== undefined) {
+        const roomId = `${body.roomId || ""}`.trim();
+        if (!roomId) throw new Error("Phòng chiếu là trường bắt buộc.");
+        payload.roomId = roomId;
+    }
+
+    if (body.showDateTime !== undefined) {
+        payload.showDateTime = parseShowDateTime(body.showDateTime);
+    }
+
+    if (body.basePrice !== undefined) {
+        payload.basePrice = parsePositiveNumber(body.basePrice, "Giá vé");
+    }
+
+    if (body.cleanupMinutes !== undefined) {
+        payload.cleanupMinutes = parseNonNegativeInteger(body.cleanupMinutes, "Thời gian dọn phòng");
+    }
+
+    return payload;
+};
+
+export const validateCancelShowtimePayload = (body) => {
+    const cancellationReason = `${body?.cancellationReason || ""}`.trim();
+
+    if (!cancellationReason) {
+        throw new Error("Lý do hủy suất chiếu là trường bắt buộc.");
+    }
+
+    return { cancellationReason };
+};
+
 export const buildScheduledShowtimeFilter = () => ({
     $or: [
         { status: SHOWTIME_STATUS.SCHEDULED },
@@ -65,11 +190,11 @@ export const ensureRoomIsActive = async (roomId) => {
     const room = await Room.findById(roomId);
 
     if (!room) {
-        throw new Error("Phong chieu khong ton tai trong he thong.");
+        throw new Error("Phòng chiếu không tồn tại trong hệ thống.");
     }
 
     if (room.status && room.status !== "ACTIVE") {
-        throw new Error("Phong chieu dang bao tri hoac ngung khai thac, khong the xep suat chieu.");
+        throw new Error("Phòng chiếu đang bảo trì hoặc ngừng khai thác, không thể xếp suất chiếu.");
     }
 
     return room;
@@ -114,7 +239,7 @@ export const ensureMovieExists = async (movieId) => {
 
 export const assertShowtimeNotInPast = (showDateTime, now = new Date()) => {
     if (isShowtimeInPast(showDateTime, now)) {
-        throw new Error("Khong the tao hoac cap nhat suat chieu trong qua khu.");
+        throw new Error("Không thể tạo hoặc cập nhật suất chiếu trong quá khứ.");
     }
 };
 
@@ -154,8 +279,8 @@ export const assertNoShowtimeOverlap = async ({
     });
 
     if (conflict) {
-        const roomName = conflict.room?.name || "phong dang chon";
-        const title = conflict.movie?.title || "mot phim khac";
+        const roomName = conflict.room?.name || "phòng đang chọn";
+        const title = conflict.movie?.title || "một phim khác";
         const start = new Date(conflict.showDateTime).toLocaleString("vi-VN", {
             timeZone: "Asia/Ho_Chi_Minh",
             hour: "2-digit",
@@ -173,7 +298,7 @@ export const assertNoShowtimeOverlap = async ({
             year: "numeric"
         });
 
-        throw new Error(`Lich chieu bi trung voi suat "${title}" tai ${roomName} (${start} - ${end}, da tinh runtime va thoi gian don phong).`);
+        throw new Error(`Lịch chiếu bị trùng với suất "${title}" tại ${roomName} (${start} - ${end}, đã tính runtime và thời gian dọn phòng).`);
     }
 };
 
@@ -198,7 +323,7 @@ export const assertNoLocalShowtimeOverlap = ({
     });
 
     if (conflict) {
-        throw new Error("Danh sach suat chieu moi dang bi de lich voi nhau trong cung phong.");
+        throw new Error("Danh sách suất chiếu mới đang bị đè lịch với nhau trong cùng phòng.");
     }
 };
 

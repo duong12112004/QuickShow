@@ -29,10 +29,17 @@ const defaultEditForm = {
 }
 
 const lifecycleLabelMap = {
-  UPCOMING: 'Sap chieu',
-  IN_PROGRESS: 'Dang chieu',
-  ENDED: 'Da ket thuc',
-  CANCELLED: 'Da huy',
+  UPCOMING: 'Sắp chiếu',
+  IN_PROGRESS: 'Đang chiếu',
+  ENDED: 'Đã kết thúc',
+  CANCELLED: 'Đã hủy',
+}
+
+const lifecycleSortOrder = {
+  UPCOMING: 0,
+  IN_PROGRESS: 1,
+  CANCELLED: 2,
+  ENDED: 3,
 }
 
 const formatMoney = (value, currency) => `${Number(value || 0).toLocaleString()} ${currency}`
@@ -51,6 +58,24 @@ const normalizeDateTime = (value) => {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return ''
   return parsed.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' })
+}
+
+const sortShowtimes = (left, right) => {
+  const leftPriority = lifecycleSortOrder[left.lifecycle] ?? 99
+  const rightPriority = lifecycleSortOrder[right.lifecycle] ?? 99
+
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority
+  }
+
+  const leftTime = new Date(left.showDateTime).getTime()
+  const rightTime = new Date(right.showDateTime).getTime()
+
+  if (left.lifecycle === 'ENDED' && right.lifecycle === 'ENDED') {
+    return rightTime - leftTime
+  }
+
+  return leftTime - rightTime
 }
 
 const darkSelectClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none'
@@ -121,7 +146,7 @@ const ManageShowtimes = () => {
         toast.error(movieResponse.data.message)
       }
     } catch {
-      toast.error('Khong tai duoc du lieu suat chieu.')
+      toast.error('Không tải được dữ liệu suất chiếu.')
     } finally {
       setLoading(false)
     }
@@ -163,7 +188,7 @@ const ManageShowtimes = () => {
   const activeRooms = rooms.filter((room) => room.status === 'ACTIVE')
 
   const filteredShowtimes = useMemo(() => {
-    return showtimes.filter((showtime) => {
+    const nextShowtimes = showtimes.filter((showtime) => {
       const search = searchValue.trim().toLowerCase()
       const movieTitle = `${showtime.movie?.title || ''}`.toLowerCase()
       const roomName = `${showtime.room?.name || ''}`.toLowerCase()
@@ -174,6 +199,8 @@ const ManageShowtimes = () => {
       if (dateFilter && localDate !== dateFilter) return false
       return true
     })
+
+    return nextShowtimes.sort(sortShowtimes)
   }, [showtimes, searchValue, statusFilter, dateFilter])
 
   useEffect(() => {
@@ -252,7 +279,7 @@ const ManageShowtimes = () => {
     event.preventDefault()
 
     if (!selectedMovieId || !selectedRoomId || !createBasePrice || Object.keys(dateTimeSelection).length === 0) {
-      return toast.error('Can chon phim, phong, gia ve va it nhat mot khung gio.')
+      return toast.error('Cần chọn phim, phòng, giá vé và ít nhất một khung giờ.')
     }
 
     try {
@@ -277,7 +304,7 @@ const ManageShowtimes = () => {
       closeCreateModal()
       await Promise.all([fetchBootstrapData(), fetchShows()])
     } catch {
-      toast.error('Khong tao duoc suat chieu.')
+      toast.error('Không tạo được suất chiếu.')
     } finally {
       setCreateSubmitting(false)
     }
@@ -308,7 +335,7 @@ const ManageShowtimes = () => {
 
     if (!editTarget) return
     if (!editForm.roomId || !editForm.showDateTime || !editForm.basePrice) {
-      return toast.error('Can nhap day du thong tin suat chieu.')
+      return toast.error('Cần nhập đầy đủ thông tin suất chiếu.')
     }
 
     try {
@@ -331,7 +358,7 @@ const ManageShowtimes = () => {
       closeEditModal()
       await Promise.all([fetchBootstrapData(), fetchShows()])
     } catch {
-      toast.error('Khong cap nhat duoc suat chieu.')
+      toast.error('Không cập nhật được suất chiếu.')
     } finally {
       setEditSubmitting(false)
     }
@@ -340,7 +367,7 @@ const ManageShowtimes = () => {
   const submitCancelShowtime = async () => {
     if (!cancelTarget) return
     if (!cancelReason.trim()) {
-      return toast.error('Can nhap ly do huy suat chieu.')
+      return toast.error('Cần nhập lý do hủy suất chiếu.')
     }
 
     try {
@@ -362,7 +389,7 @@ const ManageShowtimes = () => {
       setCancelReason('')
       await Promise.all([fetchBootstrapData(), fetchShows()])
     } catch {
-      toast.error('Khong huy duoc suat chieu.')
+      toast.error('Không hủy được suất chiếu.')
     } finally {
       setCancelSubmitting(false)
     }
@@ -385,7 +412,7 @@ const ManageShowtimes = () => {
       setDeleteTarget(null)
       await Promise.all([fetchBootstrapData(), fetchShows()])
     } catch {
-      toast.error('Khong xoa duoc suat chieu.')
+      toast.error('Không xóa được suất chiếu.')
     } finally {
       setDeleteSubmitting(false)
     }
@@ -397,14 +424,14 @@ const ManageShowtimes = () => {
 
   return (
     <div className='space-y-8'>
-      <Title text1='Quan ly' text2='Suat chieu' />
+      <Title text1='Quản lý' text2='Suất chiếu' />
 
       <div className='rounded-2xl border border-white/10 bg-white/5 p-5'>
         <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
           <div>
-            <h2 className='text-lg font-medium'>Danh sach suat chieu</h2>
+            <h2 className='text-lg font-medium'>Danh sách suất chiếu</h2>
             <p className='text-sm text-gray-400'>
-              Quan ly lich chieu theo phim, phong, gia ve va trang thai van hanh.
+              Quản lý lịch chiếu theo phim, phòng, giá vé và trạng thái vận hành.
             </p>
           </div>
 
@@ -414,14 +441,14 @@ const ManageShowtimes = () => {
               className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/10'
             >
               <RefreshCw className='h-4 w-4' />
-              Dat lai bo loc
+              Đặt lại bộ lọc
             </button>
             <button
               onClick={openCreateModal}
               className='inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20'
             >
               <PlusCircle className='h-4 w-4' />
-              Them suat chieu
+              Thêm suất chiếu
             </button>
           </div>
         </div>
@@ -430,7 +457,7 @@ const ManageShowtimes = () => {
           <input
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            placeholder='Tim theo phim hoac phong'
+            placeholder='Tìm theo phim hoặc phòng'
             className='rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none'
           />
 
@@ -439,10 +466,11 @@ const ManageShowtimes = () => {
             onChange={(event) => setStatusFilter(event.target.value)}
             className={darkSelectClassName}
           >
-            <option value='ALL' className={darkOptionClassName}>Tat ca trang thai</option>
-            <option value='UPCOMING' className={darkOptionClassName}>Sap chieu</option>
-            <option value='ENDED' className={darkOptionClassName}>Da ket thuc</option>
-            <option value='CANCELLED' className={darkOptionClassName}>Da huy</option>
+            <option value='ALL' className={darkOptionClassName}>Tất cả trạng thái</option>
+            <option value='UPCOMING' className={darkOptionClassName}>Sắp chiếu</option>
+            <option value='IN_PROGRESS' className={darkOptionClassName}>Đang chiếu</option>
+            <option value='ENDED' className={darkOptionClassName}>Đã kết thúc</option>
+            <option value='CANCELLED' className={darkOptionClassName}>Đã hủy</option>
           </select>
 
           <input
@@ -458,13 +486,13 @@ const ManageShowtimes = () => {
             <thead className='text-left text-gray-400'>
               <tr className='border-b border-white/10'>
                 <th className='px-3 py-3 font-medium'>Phim</th>
-                <th className='px-3 py-3 font-medium'>Phong</th>
-                <th className='px-3 py-3 font-medium'>Lich chieu</th>
-                <th className='px-3 py-3 font-medium'>Van hanh</th>
-                <th className='px-3 py-3 font-medium'>Gia ve</th>
-                <th className='px-3 py-3 font-medium'>Trang thai</th>
-                <th className='px-3 py-3 font-medium'>Da ban</th>
-                <th className='px-3 py-3 font-medium text-right'>Tac vu</th>
+                <th className='px-3 py-3 font-medium'>Phòng</th>
+                <th className='px-3 py-3 font-medium'>Lịch chiếu</th>
+                <th className='px-3 py-3 font-medium'>Vận hành</th>
+                <th className='px-3 py-3 font-medium'>Giá vé</th>
+                <th className='px-3 py-3 font-medium'>Trạng thái</th>
+                <th className='px-3 py-3 font-medium'>Đã bán</th>
+                <th className='px-3 py-3 font-medium text-right'>Tác vụ</th>
               </tr>
             </thead>
             <tbody>
@@ -490,7 +518,7 @@ const ManageShowtimes = () => {
                     <td className='px-3 py-4'>
                       <p className='font-medium text-white'>{showtime.movie?.title}</p>
                       <p className='text-xs text-gray-500'>
-                        {showtime.movie?.release_date ? `Khoi chieu phim: ${showtime.movie.release_date}` : 'Phim TMDB'}
+                        {showtime.movie?.release_date ? `Khởi chiếu phim: ${showtime.movie.release_date}` : 'Phim TMDB'}
                       </p>
                     </td>
                     <td className='px-3 py-4 text-gray-300'>
@@ -499,11 +527,11 @@ const ManageShowtimes = () => {
                     </td>
                     <td className='px-3 py-4 text-gray-300'>
                       <p>{dateFormat(showtime.showDateTime)}</p>
-                      <p className='text-xs text-gray-500'>Ket thuc: {dateFormat(showtime.endDateTime)}</p>
+                      <p className='text-xs text-gray-500'>Kết thúc: {dateFormat(showtime.endDateTime)}</p>
                     </td>
                     <td className='px-3 py-4 text-gray-300'>
                       <p>{formatDuration(showtime.runtimeMinutes)}</p>
-                      <p className='text-xs text-gray-500'>Don phong: {formatDuration(showtime.cleanupMinutes)}</p>
+                      <p className='text-xs text-gray-500'>Dọn phòng: {formatDuration(showtime.cleanupMinutes)}</p>
                     </td>
                     <td className='px-3 py-4 text-gray-300'>{formatMoney(showtime.basePrice, currency)}</td>
                     <td className='px-3 py-4'>
@@ -520,9 +548,9 @@ const ManageShowtimes = () => {
                       </span>
                     </td>
                     <td className='px-3 py-4 text-gray-300'>
-                      <p>{showtime.soldSeatCount} ghe</p>
+                      <p>{showtime.soldSeatCount} ghế</p>
                       {showtime.heldSeatCount > 0 && (
-                        <p className='text-xs text-amber-300'>Giu cho: {showtime.heldSeatCount}</p>
+                        <p className='text-xs text-amber-300'>Giữ chỗ: {showtime.heldSeatCount}</p>
                       )}
                     </td>
                     <td className='px-3 py-4'>
@@ -533,7 +561,7 @@ const ManageShowtimes = () => {
                           className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40'
                         >
                           <PenSquare className='h-3.5 w-3.5' />
-                          Sua
+                          Sửa
                         </button>
                         <button
                           onClick={() => {
@@ -544,7 +572,7 @@ const ManageShowtimes = () => {
                           className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40'
                         >
                           <CirclePause className='h-3.5 w-3.5' />
-                          Huy
+                          Hủy
                         </button>
                         <button
                           onClick={() => setDeleteTarget(showtime)}
@@ -552,7 +580,7 @@ const ManageShowtimes = () => {
                           className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
                         >
                           <Trash2 className='h-3.5 w-3.5' />
-                          Xoa
+                          Xóa
                         </button>
                       </div>
                     </td>
@@ -563,14 +591,14 @@ const ManageShowtimes = () => {
           </table>
 
           {!loading && filteredShowtimes.length === 0 && (
-            <div className='py-8 text-center text-sm text-gray-400'>Chua co suat chieu phu hop voi bo loc.</div>
+            <div className='py-8 text-center text-sm text-gray-400'>Chưa có suất chiếu phù hợp với bộ lọc.</div>
           )}
         </div>
 
         {filteredShowtimes.length > 0 && (
           <div className='mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 md:flex-row md:items-center md:justify-between'>
             <p className='text-sm text-gray-400'>
-              Hien thi {startRow}-{endRow} tren tong {filteredShowtimes.length} suat chieu
+              Hiển thị {startRow}-{endRow} trên tổng {filteredShowtimes.length} suất chiếu
             </p>
 
             <div className='flex items-center gap-2 self-end md:self-auto'>
@@ -581,7 +609,7 @@ const ManageShowtimes = () => {
                 className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
               >
                 <ChevronLeft className='h-4 w-4' />
-                Truoc
+                Trước
               </button>
 
               <div className='rounded-lg border border-white/10 px-3 py-2 text-sm text-white'>
@@ -607,9 +635,9 @@ const ManageShowtimes = () => {
           <div className='max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-6'>
             <div className='flex items-start justify-between gap-4'>
               <div>
-                <h3 className='text-xl font-medium text-white'>Them suat chieu</h3>
+                <h3 className='text-xl font-medium text-white'>Thêm suất chiếu</h3>
                 <p className='mt-1 text-sm text-gray-400'>
-                  Chon phim dang chieu tu TMDB, chon phong va them nhieu khung gio trong mot lan.
+                  Chọn phim đang chiếu từ TMDB, chọn phòng và thêm nhiều khung giờ trong một lần.
                 </p>
               </div>
               <button
@@ -621,7 +649,7 @@ const ManageShowtimes = () => {
             </div>
 
             <form onSubmit={handleCreateSubmit}>
-              <p className='mt-6 text-sm font-medium text-white'>Danh sach phim dang chieu</p>
+              <p className='mt-6 text-sm font-medium text-white'>Danh sách phim đang chiếu</p>
               <div className='mt-4 overflow-x-auto pb-4'>
                 <div className='flex w-max gap-4'>
                   {nowPlayingMovies.map((movie) => (
@@ -649,7 +677,7 @@ const ManageShowtimes = () => {
                             <StarIcon className='h-3.5 w-3.5 text-primary fill-primary' />
                             {movie.vote_average ? movie.vote_average.toFixed(1) : '0.0'}
                           </p>
-                          <p className='text-xs text-gray-500'>Khoi chieu: {movie.release_date}</p>
+                          <p className='text-xs text-gray-500'>Khởi chiếu: {movie.release_date}</p>
                         </div>
                       </div>
                     </button>
@@ -659,23 +687,23 @@ const ManageShowtimes = () => {
 
               <div className='mt-6 grid gap-4 lg:grid-cols-3'>
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Phong chieu</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Phòng chiếu</label>
                   <select
                     value={selectedRoomId}
                     onChange={(event) => setSelectedRoomId(event.target.value)}
                     className={darkSelectClassName}
                   >
-                    <option value='' className={darkOptionClassName}>Chon phong</option>
+                    <option value='' className={darkOptionClassName}>Chọn phòng</option>
                     {activeRooms.map((room) => (
                       <option key={room._id} value={room._id} className={darkOptionClassName}>
-                        {room.name} ({room.roomType} - {room.capacity} ghe)
+                        {room.name} ({room.roomType} - {room.capacity} ghế)
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Gia ve co ban</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Giá vé cơ bản</label>
                   <input
                     type='number'
                     min='1000'
@@ -688,7 +716,7 @@ const ManageShowtimes = () => {
                 </div>
 
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Don phong sau suat (phut)</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Dọn phòng sau suất (phút)</label>
                   <input
                     type='number'
                     min='0'
@@ -701,7 +729,7 @@ const ManageShowtimes = () => {
               </div>
 
               <div className='mt-6'>
-                <label className='mb-2 block text-sm text-gray-300'>Them khung gio</label>
+                <label className='mb-2 block text-sm text-gray-300'>Thêm khung giờ</label>
                 <div className='flex flex-col gap-3 md:flex-row'>
                   <input
                     type='datetime-local'
@@ -716,14 +744,14 @@ const ManageShowtimes = () => {
                     className='inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90'
                   >
                     <CalendarPlus className='h-4 w-4' />
-                    Them lich
+                    Thêm lịch
                   </button>
                 </div>
               </div>
 
               {Object.keys(dateTimeSelection).length > 0 && (
                 <div className='mt-6 rounded-2xl border border-white/10 bg-white/5 p-4'>
-                  <p className='text-sm font-medium text-white'>Cac moc da chon</p>
+                  <p className='text-sm font-medium text-white'>Các mốc đã chọn</p>
                   <div className='mt-3 space-y-3'>
                     {Object.entries(dateTimeSelection).map(([date, times]) => (
                       <div key={date}>
@@ -752,11 +780,11 @@ const ManageShowtimes = () => {
               )}
 
               <div className='mt-6 rounded-2xl border border-primary/15 bg-primary/5 p-4'>
-                <p className='text-sm font-medium text-white'>Tom tat</p>
+                <p className='text-sm font-medium text-white'>Tóm tắt</p>
                 <div className='mt-3 space-y-2 text-sm text-gray-300'>
-                  <p>Phim: <span className='text-white'>{selectedMovie?.title || 'Chua chon'}</span></p>
-                  <p>Runtime: <span className='text-white'>{selectedMovie?.runtime ? formatDuration(selectedMovie.runtime) : 'Lay tu du lieu phim'}</span></p>
-                  <p>So moc chieu: <span className='text-white'>{Object.values(dateTimeSelection).reduce((sum, times) => sum + times.length, 0)}</span></p>
+                  <p>Phim: <span className='text-white'>{selectedMovie?.title || 'Chưa chọn'}</span></p>
+                  <p>Runtime: <span className='text-white'>{selectedMovie?.runtime ? formatDuration(selectedMovie.runtime) : 'Lấy từ dữ liệu phim'}</span></p>
+                  <p>Số mốc chiếu: <span className='text-white'>{Object.values(dateTimeSelection).reduce((sum, times) => sum + times.length, 0)}</span></p>
                 </div>
               </div>
 
@@ -766,7 +794,7 @@ const ManageShowtimes = () => {
                   onClick={closeCreateModal}
                   className='rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/10'
                 >
-                  Dong
+                  Đóng
                 </button>
                 <button
                   type='submit'
@@ -774,7 +802,7 @@ const ManageShowtimes = () => {
                   className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60'
                 >
                   <PlusCircle className='h-4 w-4' />
-                  {createSubmitting ? 'Dang tao...' : 'Tao suat chieu'}
+                  {createSubmitting ? 'Đang tạo...' : 'Tạo suất chiếu'}
                 </button>
               </div>
             </form>
@@ -787,9 +815,9 @@ const ManageShowtimes = () => {
           <div className='w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-950 p-6'>
             <div className='flex items-start justify-between gap-4'>
               <div>
-                <h3 className='text-xl font-medium text-white'>Cap nhat suat chieu</h3>
+                <h3 className='text-xl font-medium text-white'>Cập nhật suất chiếu</h3>
                 <p className='mt-1 text-sm text-gray-400'>
-                  Phim duoc giu nguyen. Chi sua phong, gio chieu, gia ve va thoi gian don phong.
+                  Phim được giữ nguyên. Chỉ sửa phòng, giờ chiếu, giá vé và thời gian dọn phòng.
                 </p>
               </div>
               <button
@@ -804,20 +832,20 @@ const ManageShowtimes = () => {
               <div>
                 <label className='mb-2 block text-sm text-gray-300'>Phim</label>
                 <div className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white'>
-                  {editTarget.movie?.title || 'Khong co du lieu'}
+                  {editTarget.movie?.title || 'Không có dữ liệu'}
                 </div>
               </div>
 
               <div className='grid gap-4 md:grid-cols-2'>
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Phong chieu</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Phòng chiếu</label>
                   <select
                     name='roomId'
                     value={editForm.roomId}
                     onChange={handleEditChange}
                     className={darkSelectClassName}
                   >
-                    <option value='' className={darkOptionClassName}>Chon phong</option>
+                    <option value='' className={darkOptionClassName}>Chọn phòng</option>
                     {rooms.map((room) => (
                       <option key={room._id} value={room._id} className={darkOptionClassName}>
                         {room.name} ({room.roomType} - {room.status})
@@ -827,7 +855,7 @@ const ManageShowtimes = () => {
                 </div>
 
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Gio chieu</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Giờ chiếu</label>
                   <input
                     type='datetime-local'
                     min={getCurrentDateTimeLocal()}
@@ -841,7 +869,7 @@ const ManageShowtimes = () => {
 
               <div className='grid gap-4 md:grid-cols-2'>
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Gia ve co ban</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Giá vé cơ bản</label>
                   <input
                     type='number'
                     min='1000'
@@ -854,7 +882,7 @@ const ManageShowtimes = () => {
                 </div>
 
                 <div>
-                  <label className='mb-2 block text-sm text-gray-300'>Don phong sau suat (phut)</label>
+                  <label className='mb-2 block text-sm text-gray-300'>Dọn phòng sau suất (phút)</label>
                   <input
                     type='number'
                     min='0'
@@ -868,9 +896,9 @@ const ManageShowtimes = () => {
               </div>
 
               <div className='rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-gray-300'>
-                <p>Runtime: <span className='text-white'>{editTarget.runtimeMinutes ? formatDuration(editTarget.runtimeMinutes) : 'Lay tu du lieu phim'}</span></p>
+                <p>Runtime: <span className='text-white'>{editTarget.runtimeMinutes ? formatDuration(editTarget.runtimeMinutes) : 'Lấy từ dữ liệu phim'}</span></p>
                 {editSelectedRoom && (
-                  <p className='mt-2'>Phong: <span className='text-white'>{editSelectedRoom.name} • {editSelectedRoom.roomType}</span></p>
+                  <p className='mt-2'>Phòng: <span className='text-white'>{editSelectedRoom.name} • {editSelectedRoom.roomType}</span></p>
                 )}
               </div>
 
@@ -880,7 +908,7 @@ const ManageShowtimes = () => {
                   onClick={closeEditModal}
                   className='rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/10'
                 >
-                  Dong
+                  Đóng
                 </button>
                 <button
                   type='submit'
@@ -888,7 +916,7 @@ const ManageShowtimes = () => {
                   className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60'
                 >
                   <Save className='h-4 w-4' />
-                  {editSubmitting ? 'Dang luu...' : 'Luu cap nhat'}
+                  {editSubmitting ? 'Đang lưu...' : 'Lưu cập nhật'}
                 </button>
               </div>
             </form>
@@ -901,7 +929,7 @@ const ManageShowtimes = () => {
           <div className='w-full max-w-lg rounded-2xl border border-white/10 bg-slate-950 p-6'>
             <div className='flex items-start justify-between gap-4'>
               <div>
-                <h3 className='text-lg font-medium text-white'>Huy suat chieu</h3>
+                <h3 className='text-lg font-medium text-white'>Hủy suất chiếu</h3>
                 <p className='mt-1 text-sm text-gray-400'>
                   {cancelTarget.movie?.title} • {dateFormat(cancelTarget.showDateTime)}
                 </p>
@@ -918,7 +946,7 @@ const ManageShowtimes = () => {
             </div>
 
             <div className='mt-5'>
-              <label className='mb-2 block text-sm text-gray-300'>Ly do huy</label>
+              <label className='mb-2 block text-sm text-gray-300'>Lý do hủy</label>
               <textarea
                 rows={4}
                 value={cancelReason}
@@ -936,14 +964,14 @@ const ManageShowtimes = () => {
                 }}
                 className='rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/10'
               >
-                Dong
+                Đóng
               </button>
               <button
                 onClick={submitCancelShowtime}
                 disabled={cancelSubmitting}
                 className='rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60'
               >
-                {cancelSubmitting ? 'Dang huy...' : 'Xac nhan huy'}
+                {cancelSubmitting ? 'Đang hủy...' : 'Xác nhận hủy'}
               </button>
             </div>
           </div>
@@ -958,9 +986,9 @@ const ManageShowtimes = () => {
                 <Trash2 className='h-5 w-5' />
               </div>
               <div>
-                <h3 className='text-lg font-medium text-white'>Xac nhan xoa suat chieu</h3>
+                <h3 className='text-lg font-medium text-white'>Xác nhận xóa suất chiếu</h3>
                 <p className='mt-2 text-sm text-gray-400'>
-                  Suat chieu nay se bi xoa khoi he thong neu chua co ve ban ra hoac ghe dang giu.
+                  Suất chiếu này sẽ bị xóa khỏi hệ thống nếu chưa có vé bán ra hoặc ghế đang giữ.
                 </p>
                 <p className='mt-3 text-sm text-red-300'>
                   {deleteTarget.movie?.title} • {dateFormat(deleteTarget.showDateTime)}
@@ -973,14 +1001,14 @@ const ManageShowtimes = () => {
                 onClick={() => setDeleteTarget(null)}
                 className='rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/10'
               >
-                Huy
+                Hủy
               </button>
               <button
                 onClick={submitDeleteShowtime}
                 disabled={deleteSubmitting}
                 className='rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60'
               >
-                {deleteSubmitting ? 'Dang xoa...' : 'Xoa suat chieu'}
+                {deleteSubmitting ? 'Đang xóa...' : 'Xóa suất chiếu'}
               </button>
             </div>
           </div>
