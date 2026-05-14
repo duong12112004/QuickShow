@@ -160,6 +160,7 @@ const ManageRooms = () => {
   const { axios, getToken, user } = useAppContext()
   const [rooms, setRooms] = useState([])
   const [selectedRoom, setSelectedRoom] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [formData, setFormData] = useState(defaultForm)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -341,13 +342,12 @@ const ManageRooms = () => {
     }
   }
 
-  const handleDelete = async (room) => {
-    const confirmed = window.confirm(`Xóa phòng ${room.name}?`)
-    if (!confirmed) return
+  const submitDeleteRoom = async () => {
+    if (!deleteTarget) return
 
     try {
-      setDeletingId(room._id)
-      const { data } = await axios.delete(`/api/admin/rooms/${room._id}`, {
+      setDeletingId(deleteTarget._id)
+      const { data } = await axios.delete(`/api/admin/rooms/${deleteTarget._id}`, {
         headers: { Authorization: `Bearer ${await getToken()}` },
       })
 
@@ -356,11 +356,12 @@ const ManageRooms = () => {
         return
       }
 
-      if (selectedRoom?._id === room._id) {
+      if (selectedRoom?._id === deleteTarget._id) {
         resetForm()
       }
 
       toast.success(data.message)
+      setDeleteTarget(null)
       fetchRooms()
     } catch {
       toast.error('Không xóa được phòng chiếu.')
@@ -465,7 +466,7 @@ const ManageRooms = () => {
                         </button>
                         <button
                           disabled={deletingId === room._id || room.totalShowsCount > 0}
-                          onClick={() => handleDelete(room)}
+                          onClick={() => setDeleteTarget(room)}
                           className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
                         >
                           <Trash2 className='h-3.5 w-3.5' />
@@ -640,6 +641,43 @@ const ManageRooms = () => {
           </button>
         </form>
       </div>
+
+      {deleteTarget && (
+        <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4'>
+          <div className='w-full max-w-md rounded-2xl border border-red-500/20 bg-slate-950 p-6 shadow-[0_0_0_1px_rgba(239,68,68,0.1)]'>
+            <div className='flex items-start gap-3'>
+              <div className='mt-0.5 rounded-full bg-red-500/10 p-2 text-red-300'>
+                <Trash2 className='h-5 w-5' />
+              </div>
+              <div>
+                <h3 className='text-lg font-medium text-white'>Xác nhận xóa phòng chiếu</h3>
+                <p className='mt-2 text-sm text-gray-400'>
+                  Phòng này sẽ bị xóa khỏi hệ thống nếu chưa từng được gắn với suất chiếu.
+                </p>
+                <p className='mt-3 text-sm text-red-300'>
+                  {deleteTarget.name} • {deleteTarget.roomType}
+                </p>
+              </div>
+            </div>
+
+            <div className='mt-6 flex justify-end gap-3'>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className='rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/10'
+              >
+                Hủy
+              </button>
+              <button
+                onClick={submitDeleteRoom}
+                disabled={deletingId === deleteTarget._id}
+                className='rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60'
+              >
+                {deletingId === deleteTarget._id ? 'Đang xóa...' : 'Xóa phòng chiếu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

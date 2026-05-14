@@ -829,11 +829,18 @@ const ManageShowtimes = () => {
             </div>
 
             <form onSubmit={handleEditSubmit} className='mt-6 space-y-4'>
-              <div>
+              <div className='group'>
                 <label className='mb-2 block text-sm text-gray-300'>Phim</label>
-                <div className='w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white'>
-                  {editTarget.movie?.title || 'Không có dữ liệu'}
+                <div
+                  title='Trường này chỉ đọc, không thể sửa phim ở form cập nhật.'
+                  className='relative w-full cursor-not-allowed rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white/55 transition-colors group-hover:border-red-500/40 group-hover:bg-red-500/5'
+                >
+                  <span className='pr-10'>{editTarget.movie?.title || 'Không có dữ liệu'}</span>
+                  <span className='pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-red-500/10 p-1 text-red-300 opacity-0 transition-opacity group-hover:opacity-100'>
+                    <XCircle className='h-4 w-4' />
+                  </span>
                 </div>
+                <p className='mt-2 text-xs text-gray-500 group-hover:text-red-300/80'>Phim được khóa trong chế độ cập nhật suất chiếu.</p>
               </div>
 
               <div className='grid gap-4 md:grid-cols-2'>
