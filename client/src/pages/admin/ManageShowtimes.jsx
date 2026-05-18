@@ -426,7 +426,7 @@ const ManageShowtimes = () => {
     <div className='space-y-8'>
       <Title text1='Quản lý' text2='Suất chiếu' />
 
-      <div className='rounded-2xl border border-white/10 bg-white/5 p-5'>
+      <div className='rounded-2xl border border-primary/20 bg-primary/8 p-5'>
         <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
           <div>
             <h2 className='text-lg font-medium'>Danh sách suất chiếu</h2>
@@ -481,10 +481,10 @@ const ManageShowtimes = () => {
           />
         </div>
 
-        <div className='mt-5 overflow-x-auto'>
+        <div className='mt-5 overflow-x-auto rounded-2xl border border-primary/20 bg-transparent'>
           <table className='min-w-full text-sm'>
-            <thead className='text-left text-gray-400'>
-              <tr className='border-b border-white/10'>
+            <thead className='text-left text-white'>
+              <tr className='border-b border-primary/20 bg-primary/12'>
                 <th className='px-3 py-3 font-medium'>Phim</th>
                 <th className='px-3 py-3 font-medium'>Phòng</th>
                 <th className='px-3 py-3 font-medium'>Lịch chiếu</th>
@@ -514,7 +514,7 @@ const ManageShowtimes = () => {
                   showtime.heldSeatCount === 0
 
                 return (
-                  <tr key={showtime._id} className='border-b border-white/5'>
+                  <tr key={showtime._id} className='border-b border-primary/15 align-top even:bg-white/[0.02]'>
                     <td className='px-3 py-4'>
                       <p className='font-medium text-white'>{showtime.movie?.title}</p>
                       <p className='text-xs text-gray-500'>
@@ -596,7 +596,7 @@ const ManageShowtimes = () => {
         </div>
 
         {filteredShowtimes.length > 0 && (
-          <div className='mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 md:flex-row md:items-center md:justify-between'>
+          <div className='mt-5 flex flex-col gap-3 rounded-2xl border border-primary/20 bg-transparent px-4 py-3 md:flex-row md:items-center md:justify-between'>
             <p className='text-sm text-gray-400'>
               Hiển thị {startRow}-{endRow} trên tổng {filteredShowtimes.length} suất chiếu
             </p>

@@ -70,56 +70,58 @@ const MyBookings = () => {
   }
 
   return (
-    <div className='relative min-h-[80vh] px-6 pt-30 md:px-16 md:pt-40 lg:px-40'>
+    <div className='relative min-h-[80vh] px-6 pt-30 md:px-10 md:pt-40 lg:px-16 xl:px-24'>
       <BlurCircle top='100px' left='100px' />
       <BlurCircle bottom='0px' left='600px' />
 
-      <div className='mb-8 flex flex-col gap-2'>
-        <h1 className='text-2xl font-semibold'>Booking của tôi</h1>
-        <p className='max-w-2xl text-sm text-gray-400'>
-          Theo dõi trạng thái vé, thanh toán, hoàn tiền và check-in của từng booking tại đây.
-        </p>
-      </div>
-
-      {!bookings.length && (
-        <div className='max-w-3xl rounded-2xl border border-primary/20 bg-primary/8 p-6 text-sm text-gray-300'>
-          Bạn chưa có booking nào. Hãy chọn phim, suất chiếu và ghế ngồi để bắt đầu.
+      <div className='mx-auto max-w-7xl'>
+        <div className='mb-8 flex flex-col gap-2'>
+          <h1 className='text-2xl font-semibold'>Booking của tôi</h1>
+          <p className='max-w-2xl text-sm text-gray-400'>
+            Theo dõi trạng thái vé, thanh toán, hoàn tiền và check-in của từng booking tại đây.
+          </p>
         </div>
-      )}
 
-      <div className='space-y-5 pb-10'>
-        {bookings.map((item) => {
-          const movieTitle = item.movieTitle || item.show?.movie?.title || 'Phim không xác định';
-          const roomName = item.roomName || item.show?.room?.name || 'Chưa có dữ liệu';
-          const showDateTime = item.showDateTime || item.show?.showDateTime;
-          const bookingStatus = getBookingStatusUi(item.bookingStatus);
-          const paymentStatus = getPaymentStatusUi(item.paymentStatus);
-          const canPay = item.bookingStatus === 'PENDING_PAYMENT' && item.paymentStatus === 'UNPAID' && item.paymentLink;
-          const canCancel = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID';
-          const posterPath = item.show?.movie?.poster_path || item.show?.poster_path;
+        {!bookings.length && (
+          <div className='rounded-2xl border border-primary/20 bg-primary/8 p-6 text-sm text-gray-300'>
+            Bạn chưa có booking nào. Hãy chọn phim, suất chiếu và ghế ngồi để bắt đầu.
+          </div>
+        )}
 
-          return (
-            <div
-              key={item._id}
-              className='max-w-4xl rounded-2xl border border-primary/20 bg-primary/8 p-4 shadow-[0_10px_40px_rgba(244,69,101,0.08)]'
-            >
-              <div className='flex flex-col gap-5 md:flex-row md:items-start md:justify-between'>
-                <div className='flex flex-1 flex-col gap-4 md:flex-row'>
-                  {posterPath ? (
-                    <img
-                      src={image_base_url + posterPath}
-                      alt={movieTitle}
-                      className='aspect-[3/4] w-28 rounded-xl object-cover'
-                    />
-                  ) : (
-                    <div className='flex aspect-[3/4] w-28 items-center justify-center rounded-xl bg-slate-800 text-xs text-slate-400'>
-                      Không có ảnh
-                    </div>
-                  )}
+        <div className='space-y-5 pb-10'>
+          {bookings.map((item) => {
+            const movieTitle = item.movieTitle || item.show?.movie?.title || 'Phim không xác định';
+            const roomName = item.roomName || item.show?.room?.name || 'Chưa có dữ liệu';
+            const showDateTime = item.showDateTime || item.show?.showDateTime;
+            const bookingStatus = getBookingStatusUi(item.bookingStatus);
+            const paymentStatus = getPaymentStatusUi(item.paymentStatus);
+            const canPay = item.bookingStatus === 'PENDING_PAYMENT' && item.paymentStatus === 'UNPAID' && item.paymentLink;
+            const canCancel = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID';
+            const posterPath = item.show?.movie?.poster_path || item.show?.poster_path;
 
-                  <div className='flex-1 space-y-3'>
+            return (
+              <div
+                key={item._id}
+                className='rounded-3xl border border-primary/20 bg-primary/8 p-5 shadow-[0_10px_40px_rgba(244,69,101,0.08)] lg:p-6'
+              >
+                <div className='grid gap-5 lg:grid-cols-[140px_minmax(0,1fr)_260px] lg:items-start'>
+                  <div className='mx-auto w-full max-w-[140px] lg:mx-0'>
+                    {posterPath ? (
+                      <img
+                        src={image_base_url + posterPath}
+                        alt={movieTitle}
+                        className='aspect-[3/4] w-full rounded-2xl object-cover'
+                      />
+                    ) : (
+                      <div className='flex aspect-[3/4] w-full items-center justify-center rounded-2xl bg-slate-800 text-xs text-slate-400'>
+                        Không có ảnh
+                      </div>
+                    )}
+                  </div>
+
+                  <div className='space-y-4'>
                     <div className='flex flex-wrap items-center gap-2'>
-                      <p className='text-xl font-semibold'>{movieTitle}</p>
+                      <p className='text-2xl font-semibold leading-tight'>{movieTitle}</p>
                       <span className={`rounded-full px-3 py-1 text-xs font-medium ${bookingStatus.className}`}>
                         {bookingStatus.label}
                       </span>
@@ -128,13 +130,25 @@ const MyBookings = () => {
                       </span>
                     </div>
 
-                    <div className='grid gap-2 text-sm text-gray-300 md:grid-cols-2'>
-                      <p><span className='text-gray-400'>Mã booking:</span> {item.bookingCode}</p>
+                    <div className='grid gap-3 md:grid-cols-2'>
+                      <div>
+                        <p className='text-xs uppercase tracking-[0.22em] text-primary/70'>Mã booking</p>
+                        <p className='mt-2 text-[1.2rem] font-bold tracking-wide text-primary'>{item.bookingCode}</p>
+                      </div>
+
+                      <div>
+                        <p className='text-xs uppercase tracking-[0.22em] text-emerald-200/80'>Tổng tiền</p>
+                        <p className='mt-2 text-[1.2rem] font-bold text-emerald-300'>
+                          {(item.amount || 0).toLocaleString()} {currency}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className='grid gap-x-8 gap-y-3 text-sm text-gray-300 md:grid-cols-2 xl:grid-cols-3'>
                       <p><span className='text-gray-400'>Phòng chiếu:</span> {roomName}</p>
                       <p><span className='text-gray-400'>Lịch chiếu:</span> {showDateTime ? dateFormat(showDateTime) : 'Chưa có dữ liệu'}</p>
                       <p><span className='text-gray-400'>Ghế đã chọn:</span> {item.bookedSeats.join(', ')}</p>
                       <p><span className='text-gray-400'>Số lượng vé:</span> {item.bookedSeats.length}</p>
-                      <p><span className='text-gray-400'>Tổng tiền:</span> {(item.amount || 0).toLocaleString()} {currency}</p>
                       {item.show?.movie?.runtime && (
                         <p><span className='text-gray-400'>Thời lượng:</span> {timeFormat(item.show.movie.runtime)}</p>
                       )}
@@ -158,36 +172,44 @@ const MyBookings = () => {
                       </p>
                     )}
                   </div>
-                </div>
 
-                <div className='flex min-w-56 flex-col gap-3 md:items-end md:text-right'>
-                  {canPay && (
-                    <a
-                      href={item.paymentLink}
-                      className='rounded-full bg-primary px-5 py-2 text-sm font-medium text-white transition hover:bg-primary-dull'
-                    >
-                      Thanh toán ngay
-                    </a>
-                  )}
+                  <div className='flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/10 p-4 lg:min-h-full'>
+                    <p className='text-sm font-medium text-white'>Thao tác booking</p>
 
-                  {canCancel && (
-                    <button
-                      onClick={() => handleCancelBooking(item._id)}
-                      disabled={processingId === item._id}
-                      className='rounded-full border border-rose-400/40 px-5 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60'
-                    >
-                      {processingId === item._id ? 'Đang xử lý...' : 'Hủy booking'}
-                    </button>
-                  )}
+                    {canPay && (
+                      <a
+                        href={item.paymentLink}
+                        className='inline-flex justify-center rounded-full bg-primary px-5 py-2 text-sm font-medium text-white transition hover:bg-primary-dull'
+                      >
+                        Thanh toán ngay
+                      </a>
+                    )}
 
-                  <p className='text-xs text-gray-400'>
-                    Bạn có thể tự hủy vé đã thanh toán trước giờ chiếu ít nhất 24 giờ.
-                  </p>
+                    {canCancel && (
+                      <button
+                        onClick={() => handleCancelBooking(item._id)}
+                        disabled={processingId === item._id}
+                        className='rounded-full border border-rose-400/40 px-5 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60'
+                      >
+                        {processingId === item._id ? 'Đang xử lý...' : 'Hủy booking'}
+                      </button>
+                    )}
+
+                    {!canPay && !canCancel && (
+                      <div className='rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300'>
+                        Booking này hiện không có thao tác thêm.
+                      </div>
+                    )}
+
+                    <p className='mt-auto text-xs leading-6 text-gray-400'>
+                      Bạn có thể tự hủy vé đã thanh toán trước giờ chiếu ít nhất 24 giờ.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
