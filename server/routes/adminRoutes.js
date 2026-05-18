@@ -1,8 +1,11 @@
 import express from "express";
 import { protectAdmin } from "../middleware/auth.js";
 import {
+    cancelAdminBooking,
     cancelShowtime,
+    checkInBookingByCode,
     createShowtime,
+    exportBookingsCsv,
     deleteShowtime,
     getAllBookings,
     getAdminShowtimes,
@@ -30,6 +33,10 @@ adminRouter.post('/showtimes', protectAdmin, createShowtime);
 adminRouter.put('/showtimes/:showId', protectAdmin, updateShowtime);
 adminRouter.patch('/showtimes/:showId/cancel', protectAdmin, cancelShowtime);
 adminRouter.delete('/showtimes/:showId', protectAdmin, deleteShowtime);
+adminRouter.get('/bookings/export', protectAdmin, exportBookingsCsv);
+adminRouter.get('/bookings', protectAdmin, getAllBookings);
+adminRouter.post('/bookings/check-in', protectAdmin, checkInBookingByCode);
+adminRouter.patch('/bookings/:bookingId/cancel', protectAdmin, cancelAdminBooking);
 adminRouter.get('/all-bookings', protectAdmin, getAllBookings);
 adminRouter.get('/seed', protectAdmin, seedCinemaData);
 adminRouter.get('/rooms', protectAdmin, getAllRooms);
