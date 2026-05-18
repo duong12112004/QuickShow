@@ -66,7 +66,8 @@ const expireUnpaidBookings = inngest.createFunction(
         triggers: { event: "app/checkpayment" }
     },
     async ({ event, step }) => {
-        const expiresAt = new Date(event.data.expiresAt || Date.now());
+        //const expiresAt = new Date(event.data.expiresAt || Date.now());
+        const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
         await step.sleepUntil("wait-until-booking-expired", expiresAt);
 
         await step.run("expire-booking-and-release-seats", async () => {
