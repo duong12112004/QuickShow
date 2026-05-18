@@ -404,7 +404,7 @@ const ManageRooms = () => {
               </thead>
               <tbody>
                 {paginatedRooms.map((room) => (
-                  <tr key={room._id} className='border-b border-primary/15 align-top even:bg-white/[0.02]'>
+                  <tr key={room._id} className='border-b border-primary/15 align-top even:bg-white/2'>
                     <td className='px-3 py-4'>
                       <p className='font-medium text-white'>{room.name}</p>
                       <p className='text-xs text-gray-500'>

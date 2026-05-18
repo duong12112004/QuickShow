@@ -358,7 +358,7 @@ const ListBookings = () => {
               const canCancel = ['PENDING_PAYMENT', 'CONFIRMED'].includes(item.bookingStatus);
 
               return (
-                <tr key={item._id} className='border-b border-primary/15 align-top even:bg-white/[0.02]'>
+                <tr key={item._id} className='border-b border-primary/15 align-top even:bg-white/2'>
                   <td className='p-3 pl-5'>
                     <div className='font-semibold text-white'>{item.bookingCode}</div>
                     <div className='mt-1 text-xs text-gray-400'>Tạo lúc: {dateFormat(item.createdAt)}</div>
