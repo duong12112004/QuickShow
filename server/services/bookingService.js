@@ -270,41 +270,6 @@ export const calculateRefundBreakdown = (booking, refundRate = FULL_REFUND_RATE)
     };
 };
 
-const resolveStripePaymentIntentId = async (stripeClient, booking) => {
-    if (booking.paymentIntentId) {
-        return booking.paymentIntentId;
-    }
-
-    if (!booking.stripeSessionId) {
-        return "";
-    }
-
-    const session = await stripeClient.checkout.sessions.retrieve(booking.stripeSessionId);
-    const paymentIntentId = `${session?.payment_intent || ""}`;
-
-    if (paymentIntentId) {
-        booking.paymentIntentId = paymentIntentId;
-    }
-
-    return paymentIntentId;
-};
-
-const getStripePaidAmountForRefund = (booking, walletAmountUsed) => {
-    const recordedStripeAmount = Math.max(Math.floor(Number(booking.stripeAmount || 0)), 0);
-
-    if (recordedStripeAmount > 0) {
-        return recordedStripeAmount;
-    }
-
-    const totalAmount = Math.max(Math.floor(Number(booking.amount || 0)), 0);
-
-    if (walletAmountUsed > 0) {
-        return Math.max(totalAmount - walletAmountUsed, 0);
-    }
-
-    return totalAmount;
-};
-
 export const markBookingAsCancelled = (booking, {
     actor,
     cancelledBy,
@@ -320,8 +285,6 @@ export const markBookingAsCancelled = (booking, {
     booking.refundFeeAmount = 0;
     booking.refundRate = 0;
     booking.refundMethod = "";
-    booking.stripeRefundAmount = 0;
-    booking.walletRefundAmount = 0;
 
     setBookingStatuses(booking, {
         bookingStatus,
@@ -339,9 +302,7 @@ export const markBookingAsRefundPending = (booking, {
     refundAmount,
     refundFeeAmount,
     refundRate,
-    refundMethod,
-    stripeRefundAmount = 0,
-    walletRefundAmount = 0
+    refundMethod
 }) => {
     booking.cancelledBy = cancelledBy;
     booking.cancelReason = reason;
@@ -351,8 +312,6 @@ export const markBookingAsRefundPending = (booking, {
     booking.refundFeeAmount = refundFeeAmount;
     booking.refundRate = refundRate;
     booking.refundMethod = refundMethod;
-    booking.stripeRefundAmount = stripeRefundAmount;
-    booking.walletRefundAmount = walletRefundAmount;
 
     setBookingStatuses(booking, {
         bookingStatus: BOOKING_STATUS.REFUND_PENDING,
@@ -370,9 +329,7 @@ export const markBookingAsRefunded = (booking, {
     refundAmount,
     refundFeeAmount,
     refundRate,
-    refundMethod,
-    stripeRefundAmount = 0,
-    walletRefundAmount = 0
+    refundMethod
 }) => {
     booking.refundedAt = new Date();
     const settledRefundAmount = refundAmount ?? refund?.amount;
@@ -380,8 +337,6 @@ export const markBookingAsRefunded = (booking, {
     booking.refundFeeAmount = refundFeeAmount ?? Math.max((booking.amount || 0) - (booking.refundAmount || 0), 0);
     booking.refundRate = refundRate ?? (booking.amount ? booking.refundAmount / booking.amount : 0);
     booking.refundMethod = refundMethod || booking.refundMethod;
-    booking.stripeRefundAmount = stripeRefundAmount;
-    booking.walletRefundAmount = walletRefundAmount;
     booking.refundReason = reason;
     if ([REFUND_METHOD.STRIPE, REFUND_METHOD.MIXED].includes(booking.refundMethod)) {
         booking.stripeRefundId = refund?.id || booking.stripeRefundId;
@@ -408,8 +363,6 @@ export const markRefundFailed = (booking, {
     booking.refundFeeAmount = 0;
     booking.refundRate = 0;
     booking.refundMethod = "";
-    booking.stripeRefundAmount = 0;
-    booking.walletRefundAmount = 0;
 
     setBookingStatuses(booking, {
         bookingStatus: BOOKING_STATUS.CONFIRMED,
@@ -467,84 +420,37 @@ export const cancelBookingAndHandlePayment = async (booking, {
 
     const refundPolicy = getRefundPolicyForCancellation(cancelledBy);
     const refundBreakdown = calculateRefundBreakdown(booking, refundPolicy.refundRate);
-    const walletAmountUsed = Math.max(Math.floor(Number(booking.walletAmountUsed || 0)), 0);
-    const stripePaidAmount = getStripePaidAmountForRefund(booking, walletAmountUsed);
-
-    const isWalletRefund = refundPolicy.refundMethod === REFUND_METHOD.WALLET;
-    const walletRefundAmount = isWalletRefund
-        ? refundBreakdown.refundAmount
-        : Math.min(walletAmountUsed, refundBreakdown.refundAmount);
-    const stripeRefundAmount = isWalletRefund
-        ? 0
-        : Math.min(stripePaidAmount, Math.max(refundBreakdown.refundAmount - walletRefundAmount, 0));
-    const refundMethod = walletRefundAmount > 0 && stripeRefundAmount > 0
-        ? REFUND_METHOD.MIXED
-        : walletRefundAmount > 0
-            ? REFUND_METHOD.WALLET
-            : REFUND_METHOD.STRIPE;
+    const refundMethod = REFUND_METHOD.WALLET;
 
     markBookingAsRefundPending(booking, {
         actor,
         cancelledBy,
         reason,
         ...refundBreakdown,
-        refundMethod,
-        stripeRefundAmount,
-        walletRefundAmount
+        refundMethod
     });
     await booking.save();
 
     try {
-        let stripeRefund = null;
-        let walletRefund = null;
-
-        if (stripeRefundAmount > 0) {
-            const stripeClient = createStripeClient();
-            const paymentIntentId = await resolveStripePaymentIntentId(stripeClient, booking);
-
-            if (!paymentIntentId) {
-                throw new Error("Không tìm thấy giao dịch Stripe để hoàn tiền.");
+        const walletRefund = await creditWallet({
+            userId: booking.user,
+            bookingId: booking._id,
+            amount: refundBreakdown.refundAmount,
+            note: `Hoàn ${Math.round(refundBreakdown.refundRate * 100)}% booking ${booking.bookingCode} vào ví QuickShow.`,
+            metadata: {
+                bookingCode: booking.bookingCode,
+                cancelledBy,
+                refundRate: refundBreakdown.refundRate,
+                refundMethod
             }
-
-            stripeRefund = await stripeClient.refunds.create({
-                payment_intent: paymentIntentId,
-                amount: stripeRefundAmount,
-                metadata: {
-                    bookingId: booking._id.toString(),
-                    bookingCode: booking.bookingCode,
-                    refundRate: `${Math.round(refundBreakdown.refundRate * 100)}`,
-                    refundAmount: `${refundBreakdown.refundAmount}`,
-                    refundFeeAmount: `${refundBreakdown.refundFeeAmount}`,
-                    refundMethod
-                }
-            });
-        }
-
-        if (walletRefundAmount > 0) {
-            walletRefund = await creditWallet({
-                userId: booking.user,
-                bookingId: booking._id,
-                amount: walletRefundAmount,
-                note: isWalletRefund
-                    ? `Hoàn ${Math.round(refundBreakdown.refundRate * 100)}% booking ${booking.bookingCode} vào ví QuickShow.`
-                    : `Hoàn phần thanh toán bằng ví của booking ${booking.bookingCode}.`,
-                metadata: {
-                    bookingCode: booking.bookingCode,
-                    cancelledBy,
-                    refundRate: refundBreakdown.refundRate,
-                    refundMethod
-                }
-            });
-        }
+        });
 
         markBookingAsRefunded(booking, {
             actor,
-            refund: stripeRefund || walletRefund,
+            refund: walletRefund,
             reason,
             ...refundBreakdown,
-            refundMethod,
-            stripeRefundAmount,
-            walletRefundAmount
+            refundMethod
         });
         await booking.save();
         await releaseSeats(booking.show, booking.bookedSeats, {
@@ -555,11 +461,8 @@ export const cancelBookingAndHandlePayment = async (booking, {
         return {
             booking,
             releasedSeats: booking.bookedSeats,
-            refund: stripeRefund || walletRefund,
-            stripeRefund,
+            refund: walletRefund,
             walletRefund,
-            stripeRefundAmount,
-            walletRefundAmount,
             ...refundBreakdown,
             refundPolicy: {
                 ...refundPolicy,

@@ -51,8 +51,6 @@ const bookingSchema = new mongoose.Schema({
     refundFeeAmount: { type: Number, default: 0 },
     refundRate: { type: Number, default: 0 },
     refundMethod: { type: String, enum: ["STRIPE", "WALLET", "MIXED", ""], default: "" },
-    stripeRefundAmount: { type: Number, default: 0 },
-    walletRefundAmount: { type: Number, default: 0 },
     refundReason: { type: String, default: "" },
     stripeSessionId: { type: String, default: "" },
     paymentIntentId: { type: String, default: "" },

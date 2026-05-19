@@ -157,8 +157,6 @@ const serializeBookingsToCsv = (bookings) => {
         "Thanh toán bằng ví",
         "Thanh toán Stripe",
         "Số tiền hoàn",
-        "Hoàn Stripe",
-        "Hoàn ví",
         "Phí hủy",
         "Tỷ lệ hoàn",
         "Phương thức hoàn",
@@ -190,8 +188,6 @@ const serializeBookingsToCsv = (bookings) => {
         booking.walletAmountUsed || 0,
         booking.stripeAmount || 0,
         effectiveRefundAmount,
-        booking.stripeRefundAmount || 0,
-        booking.walletRefundAmount || 0,
         booking.refundFeeAmount || 0,
         booking.refundRate ? `${Math.round(booking.refundRate * 100)}%` : "",
         booking.refundMethod || "",
@@ -591,13 +587,10 @@ export const cancelAdminBooking = async (req, res) => {
         res.json({
             success: true,
             message: result.refund
-                ? `Đã hủy booking và hoàn ${Math.round((result.refundRate || 0) * 100)}% vào ví QuickShow: ${(result.walletRefundAmount || 0).toLocaleString("vi-VN")} VND.`
+                ? `Đã hủy booking và hoàn ${Math.round((result.refundRate || 0) * 100)}% vào ví QuickShow: ${(result.refundAmount || 0).toLocaleString("vi-VN")} VND.`
                 : "Đã hủy booking thành công.",
             refund: {
                 amount: result.refundAmount || 0,
-                stripeAmount: result.stripeRefundAmount || 0,
-                walletAmount: result.walletRefundAmount || 0,
-                stripeRefundId: result.stripeRefund?.id || "",
                 feeAmount: result.refundFeeAmount || 0,
                 rate: result.refundRate || 0,
                 method: result.refundPolicy?.refundMethod || ""

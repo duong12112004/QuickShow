@@ -392,14 +392,8 @@ const ListBookings = () => {
                     {item.refundedAt && <p className='mt-2 text-xs text-gray-400'>Hoàn lúc: {dateFormat(item.refundedAt)}</p>}
                     {effectiveRefundAmount > 0 && (
                       <p className='mt-2 text-xs text-fuchsia-200'>
-                        {item.refundMethod === 'WALLET' ? 'Ví' : 'Hoàn'}: {effectiveRefundAmount.toLocaleString()} {currency}
+                        Hoàn vào ví: {effectiveRefundAmount.toLocaleString()} {currency}
                       </p>
-                    )}
-                    {item.stripeRefundAmount > 0 && (
-                      <p className='mt-1 text-xs text-sky-200'>Stripe: {item.stripeRefundAmount.toLocaleString()} {currency}</p>
-                    )}
-                    {item.walletRefundAmount > 0 && (
-                      <p className='mt-1 text-xs text-emerald-200'>Ví: {item.walletRefundAmount.toLocaleString()} {currency}</p>
                     )}
                     {item.refundFeeAmount > 0 && (
                       <p className='mt-1 text-xs text-amber-200'>Phí hủy: {item.refundFeeAmount.toLocaleString()} {currency}</p>

@@ -173,13 +173,7 @@ const MyBookings = () => {
                         <p><span className='text-gray-400'>Hoàn tiền lúc:</span> {dateFormat(item.refundedAt)}</p>
                       )}
                       {effectiveRefundAmount > 0 && (
-                        <p><span className='text-gray-400'>{item.refundMethod === 'WALLET' ? 'Hoàn vào ví:' : 'Số tiền hoàn:'}</span> {effectiveRefundAmount.toLocaleString()} {currency}</p>
-                      )}
-                      {item.stripeRefundAmount > 0 && (
-                        <p><span className='text-gray-400'>Hoàn qua Stripe:</span> {item.stripeRefundAmount.toLocaleString()} {currency}</p>
-                      )}
-                      {item.walletRefundAmount > 0 && (
-                        <p><span className='text-gray-400'>Hoàn vào ví:</span> {item.walletRefundAmount.toLocaleString()} {currency}</p>
+                        <p><span className='text-gray-400'>Hoàn vào ví:</span> {effectiveRefundAmount.toLocaleString()} {currency}</p>
                       )}
                       {item.refundFeeAmount > 0 && (
                         <p><span className='text-gray-400'>Phí hủy:</span> {item.refundFeeAmount.toLocaleString()} {currency}</p>
