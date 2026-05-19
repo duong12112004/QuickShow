@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import Show from "../models/Show.js";
 import { getShowtimeLifecycle } from "./showtimeService.js";
+import { creditWallet, reverseWalletDebit } from "./walletService.js";
 
 export const BOOKING_STATUS = {
     PENDING_PAYMENT: "PENDING_PAYMENT",
@@ -26,6 +27,12 @@ export const PAYMENT_PROVIDER = {
     STRIPE_TEST: "STRIPE_TEST"
 };
 
+export const REFUND_METHOD = {
+    STRIPE: "STRIPE",
+    WALLET: "WALLET",
+    MIXED: "MIXED"
+};
+
 export const STATUS_ACTOR = {
     USER: "USER",
     ADMIN: "ADMIN",
@@ -35,6 +42,8 @@ export const STATUS_ACTOR = {
 
 export const PAYMENT_HOLD_MINUTES = 30;
 export const USER_CANCELLATION_NOTICE_HOURS = 24;
+export const USER_REFUND_RATE = 0.8;
+export const FULL_REFUND_RATE = 1;
 
 const STRIPE_SEAT_TYPE_PRICING = {
     STANDARD: (basePrice) => basePrice,
@@ -232,6 +241,70 @@ export const parseRefundError = (error) => {
     return error?.raw?.message || error?.message || "Không thể hoàn tiền trên Stripe.";
 };
 
+export const getRefundPolicyForCancellation = (cancelledBy) => {
+    if (cancelledBy === "USER") {
+        return {
+            refundRate: USER_REFUND_RATE,
+            refundMethod: REFUND_METHOD.WALLET,
+            label: "Hoàn 80% giá trị booking, giữ 20% phí hủy."
+        };
+    }
+
+    return {
+        refundRate: FULL_REFUND_RATE,
+        refundMethod: REFUND_METHOD.WALLET,
+        label: "Hoàn 100% giá trị booking vào ví QuickShow."
+    };
+};
+
+export const calculateRefundBreakdown = (booking, refundRate = FULL_REFUND_RATE) => {
+    const originalAmount = Math.max(Math.floor(Number(booking?.amount || 0)), 0);
+    const normalizedRate = Math.min(Math.max(Number(refundRate) || 0, 0), 1);
+    const refundAmount = Math.min(Math.floor(originalAmount * normalizedRate), originalAmount);
+    const refundFeeAmount = Math.max(originalAmount - refundAmount, 0);
+
+    return {
+        refundAmount,
+        refundFeeAmount,
+        refundRate: normalizedRate
+    };
+};
+
+const resolveStripePaymentIntentId = async (stripeClient, booking) => {
+    if (booking.paymentIntentId) {
+        return booking.paymentIntentId;
+    }
+
+    if (!booking.stripeSessionId) {
+        return "";
+    }
+
+    const session = await stripeClient.checkout.sessions.retrieve(booking.stripeSessionId);
+    const paymentIntentId = `${session?.payment_intent || ""}`;
+
+    if (paymentIntentId) {
+        booking.paymentIntentId = paymentIntentId;
+    }
+
+    return paymentIntentId;
+};
+
+const getStripePaidAmountForRefund = (booking, walletAmountUsed) => {
+    const recordedStripeAmount = Math.max(Math.floor(Number(booking.stripeAmount || 0)), 0);
+
+    if (recordedStripeAmount > 0) {
+        return recordedStripeAmount;
+    }
+
+    const totalAmount = Math.max(Math.floor(Number(booking.amount || 0)), 0);
+
+    if (walletAmountUsed > 0) {
+        return Math.max(totalAmount - walletAmountUsed, 0);
+    }
+
+    return totalAmount;
+};
+
 export const markBookingAsCancelled = (booking, {
     actor,
     cancelledBy,
@@ -243,6 +316,12 @@ export const markBookingAsCancelled = (booking, {
     booking.cancelledBy = cancelledBy;
     booking.cancelReason = reason;
     booking.cancelledAt = new Date();
+    booking.refundAmount = 0;
+    booking.refundFeeAmount = 0;
+    booking.refundRate = 0;
+    booking.refundMethod = "";
+    booking.stripeRefundAmount = 0;
+    booking.walletRefundAmount = 0;
 
     setBookingStatuses(booking, {
         bookingStatus,
@@ -256,12 +335,24 @@ export const markBookingAsCancelled = (booking, {
 export const markBookingAsRefundPending = (booking, {
     actor,
     cancelledBy,
-    reason
+    reason,
+    refundAmount,
+    refundFeeAmount,
+    refundRate,
+    refundMethod,
+    stripeRefundAmount = 0,
+    walletRefundAmount = 0
 }) => {
     booking.cancelledBy = cancelledBy;
     booking.cancelReason = reason;
     booking.cancelledAt = new Date();
     booking.refundReason = reason;
+    booking.refundAmount = refundAmount;
+    booking.refundFeeAmount = refundFeeAmount;
+    booking.refundRate = refundRate;
+    booking.refundMethod = refundMethod;
+    booking.stripeRefundAmount = stripeRefundAmount;
+    booking.walletRefundAmount = walletRefundAmount;
 
     setBookingStatuses(booking, {
         bookingStatus: BOOKING_STATUS.REFUND_PENDING,
@@ -275,12 +366,26 @@ export const markBookingAsRefundPending = (booking, {
 export const markBookingAsRefunded = (booking, {
     actor,
     refund,
-    reason
+    reason,
+    refundAmount,
+    refundFeeAmount,
+    refundRate,
+    refundMethod,
+    stripeRefundAmount = 0,
+    walletRefundAmount = 0
 }) => {
     booking.refundedAt = new Date();
-    booking.refundAmount = refund?.amount ? refund.amount : booking.amount;
+    const settledRefundAmount = refundAmount ?? refund?.amount;
+    booking.refundAmount = Math.min(settledRefundAmount || booking.amount, booking.amount);
+    booking.refundFeeAmount = refundFeeAmount ?? Math.max((booking.amount || 0) - (booking.refundAmount || 0), 0);
+    booking.refundRate = refundRate ?? (booking.amount ? booking.refundAmount / booking.amount : 0);
+    booking.refundMethod = refundMethod || booking.refundMethod;
+    booking.stripeRefundAmount = stripeRefundAmount;
+    booking.walletRefundAmount = walletRefundAmount;
     booking.refundReason = reason;
-    booking.stripeRefundId = refund?.id || booking.stripeRefundId;
+    if ([REFUND_METHOD.STRIPE, REFUND_METHOD.MIXED].includes(booking.refundMethod)) {
+        booking.stripeRefundId = refund?.id || booking.stripeRefundId;
+    }
 
     setBookingStatuses(booking, {
         bookingStatus: BOOKING_STATUS.REFUNDED,
@@ -299,6 +404,12 @@ export const markRefundFailed = (booking, {
     booking.cancelReason = "";
     booking.cancelledAt = null;
     booking.refundReason = reason;
+    booking.refundAmount = 0;
+    booking.refundFeeAmount = 0;
+    booking.refundRate = 0;
+    booking.refundMethod = "";
+    booking.stripeRefundAmount = 0;
+    booking.walletRefundAmount = 0;
 
     setBookingStatuses(booking, {
         bookingStatus: BOOKING_STATUS.CONFIRMED,
@@ -329,39 +440,132 @@ export const cancelBookingAndHandlePayment = async (booking, {
                 : PAYMENT_STATUS.UNPAID,
             isPaid: false
         });
+        if (booking.walletAmountUsed > 0) {
+            await reverseWalletDebit({
+                userId: booking.user,
+                bookingId: booking._id,
+                amount: booking.walletAmountUsed,
+                note: `Hoàn lại ví vì booking ${booking.bookingCode} bị hủy trước khi thanh toán Stripe.`,
+                metadata: { bookingCode: booking.bookingCode, cancelledBy }
+            });
+            booking.walletAmountUsed = 0;
+        }
         await booking.save();
         await releaseSeats(booking.show, booking.bookedSeats, {
             fromHeld: true,
             fromOccupied: false
         });
-        return { booking, releasedSeats: booking.bookedSeats, refund: null };
+        return {
+            booking,
+            releasedSeats: booking.bookedSeats,
+            refund: null,
+            refundAmount: 0,
+            refundFeeAmount: 0,
+            refundRate: 0
+        };
     }
 
-    if (!booking.paymentIntentId) {
-        throw new Error("Không tìm thấy giao dịch Stripe để hoàn tiền.");
-    }
+    const refundPolicy = getRefundPolicyForCancellation(cancelledBy);
+    const refundBreakdown = calculateRefundBreakdown(booking, refundPolicy.refundRate);
+    const walletAmountUsed = Math.max(Math.floor(Number(booking.walletAmountUsed || 0)), 0);
+    const stripePaidAmount = getStripePaidAmountForRefund(booking, walletAmountUsed);
 
-    markBookingAsRefundPending(booking, { actor, cancelledBy, reason });
+    const isWalletRefund = refundPolicy.refundMethod === REFUND_METHOD.WALLET;
+    const walletRefundAmount = isWalletRefund
+        ? refundBreakdown.refundAmount
+        : Math.min(walletAmountUsed, refundBreakdown.refundAmount);
+    const stripeRefundAmount = isWalletRefund
+        ? 0
+        : Math.min(stripePaidAmount, Math.max(refundBreakdown.refundAmount - walletRefundAmount, 0));
+    const refundMethod = walletRefundAmount > 0 && stripeRefundAmount > 0
+        ? REFUND_METHOD.MIXED
+        : walletRefundAmount > 0
+            ? REFUND_METHOD.WALLET
+            : REFUND_METHOD.STRIPE;
+
+    markBookingAsRefundPending(booking, {
+        actor,
+        cancelledBy,
+        reason,
+        ...refundBreakdown,
+        refundMethod,
+        stripeRefundAmount,
+        walletRefundAmount
+    });
     await booking.save();
 
     try {
-        const stripeClient = createStripeClient();
-        const refund = await stripeClient.refunds.create({
-            payment_intent: booking.paymentIntentId,
-            metadata: {
-                bookingId: booking._id.toString(),
-                bookingCode: booking.bookingCode
-            }
-        });
+        let stripeRefund = null;
+        let walletRefund = null;
 
-        markBookingAsRefunded(booking, { actor, refund, reason });
+        if (stripeRefundAmount > 0) {
+            const stripeClient = createStripeClient();
+            const paymentIntentId = await resolveStripePaymentIntentId(stripeClient, booking);
+
+            if (!paymentIntentId) {
+                throw new Error("Không tìm thấy giao dịch Stripe để hoàn tiền.");
+            }
+
+            stripeRefund = await stripeClient.refunds.create({
+                payment_intent: paymentIntentId,
+                amount: stripeRefundAmount,
+                metadata: {
+                    bookingId: booking._id.toString(),
+                    bookingCode: booking.bookingCode,
+                    refundRate: `${Math.round(refundBreakdown.refundRate * 100)}`,
+                    refundAmount: `${refundBreakdown.refundAmount}`,
+                    refundFeeAmount: `${refundBreakdown.refundFeeAmount}`,
+                    refundMethod
+                }
+            });
+        }
+
+        if (walletRefundAmount > 0) {
+            walletRefund = await creditWallet({
+                userId: booking.user,
+                bookingId: booking._id,
+                amount: walletRefundAmount,
+                note: isWalletRefund
+                    ? `Hoàn ${Math.round(refundBreakdown.refundRate * 100)}% booking ${booking.bookingCode} vào ví QuickShow.`
+                    : `Hoàn phần thanh toán bằng ví của booking ${booking.bookingCode}.`,
+                metadata: {
+                    bookingCode: booking.bookingCode,
+                    cancelledBy,
+                    refundRate: refundBreakdown.refundRate,
+                    refundMethod
+                }
+            });
+        }
+
+        markBookingAsRefunded(booking, {
+            actor,
+            refund: stripeRefund || walletRefund,
+            reason,
+            ...refundBreakdown,
+            refundMethod,
+            stripeRefundAmount,
+            walletRefundAmount
+        });
         await booking.save();
         await releaseSeats(booking.show, booking.bookedSeats, {
             fromHeld: true,
             fromOccupied: true
         });
 
-        return { booking, releasedSeats: booking.bookedSeats, refund };
+        return {
+            booking,
+            releasedSeats: booking.bookedSeats,
+            refund: stripeRefund || walletRefund,
+            stripeRefund,
+            walletRefund,
+            stripeRefundAmount,
+            walletRefundAmount,
+            ...refundBreakdown,
+            refundPolicy: {
+                ...refundPolicy,
+                refundMethod
+            }
+        };
     } catch (error) {
         markRefundFailed(booking, {
             actor,

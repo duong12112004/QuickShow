@@ -8,7 +8,7 @@ import { useAppContext } from '../context/AppContext';
 import { getBookingStatusUi, getPaymentStatusUi } from '../lib/bookingStatus';
 
 const MyBookings = () => {
-  const { axios, getToken, user, image_base_url } = useAppContext();
+  const { axios, getToken, user, image_base_url, wallet, fetchWallet } = useAppContext();
   const currency = import.meta.env.VITE_CURRENCY;
 
   const [bookings, setBookings] = useState([]);
@@ -35,7 +35,7 @@ const MyBookings = () => {
   };
 
   const handleCancelBooking = async (bookingId) => {
-    const confirmed = window.confirm('Bạn có chắc chắn muốn hủy booking này không? Nếu đủ điều kiện, hệ thống sẽ gửi yêu cầu hoàn tiền trên Stripe test.');
+    const confirmed = window.confirm('Bạn có chắc chắn muốn hủy booking này không? Nếu đủ điều kiện, hệ thống sẽ cộng 80% giá trị booking vào ví QuickShow và giữ 20% phí hủy.');
 
     if (!confirmed) return;
 
@@ -47,7 +47,7 @@ const MyBookings = () => {
 
       if (data.success) {
         toast.success(data.message);
-        await getMyBookings();
+        await Promise.all([getMyBookings(), fetchWallet()]);
       } else {
         toast.error(data.message);
       }
@@ -61,7 +61,7 @@ const MyBookings = () => {
 
   useEffect(() => {
     if (user) {
-      getMyBookings();
+      Promise.all([getMyBookings(), fetchWallet()]);
     }
   }, [user]);
 
@@ -82,6 +82,18 @@ const MyBookings = () => {
           </p>
         </div>
 
+        <div className='mb-8 rounded-2xl border border-primary/20 bg-primary/8 p-5'>
+          <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
+            <div>
+              <p className='text-sm text-gray-400'>Ví QuickShow</p>
+              <p className='mt-2 text-2xl font-semibold text-primary'>{(wallet.balance || 0).toLocaleString()} {currency}</p>
+            </div>
+            <p className='max-w-xl text-sm text-gray-300'>
+              Tiền hoàn từ vé tự hủy sẽ được cộng vào ví và có thể dùng để trừ trực tiếp khi đặt vé tiếp theo.
+            </p>
+          </div>
+        </div>
+
         {!bookings.length && (
           <div className='rounded-2xl border border-primary/20 bg-primary/8 p-6 text-sm text-gray-300'>
             Bạn chưa có booking nào. Hãy chọn phim, suất chiếu và ghế ngồi để bắt đầu.
@@ -98,6 +110,11 @@ const MyBookings = () => {
             const canPay = item.bookingStatus === 'PENDING_PAYMENT' && item.paymentStatus === 'UNPAID' && item.paymentLink;
             const canCancel = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID';
             const posterPath = item.show?.movie?.poster_path || item.show?.poster_path;
+            const effectiveRefundAmount = item.refundAmount > 0
+              ? item.refundAmount
+              : item.paymentStatus === 'REFUNDED'
+                ? item.amount || 0
+                : 0;
 
             return (
               <div
@@ -154,6 +171,21 @@ const MyBookings = () => {
                       )}
                       {item.refundedAt && (
                         <p><span className='text-gray-400'>Hoàn tiền lúc:</span> {dateFormat(item.refundedAt)}</p>
+                      )}
+                      {effectiveRefundAmount > 0 && (
+                        <p><span className='text-gray-400'>{item.refundMethod === 'WALLET' ? 'Hoàn vào ví:' : 'Số tiền hoàn:'}</span> {effectiveRefundAmount.toLocaleString()} {currency}</p>
+                      )}
+                      {item.stripeRefundAmount > 0 && (
+                        <p><span className='text-gray-400'>Hoàn qua Stripe:</span> {item.stripeRefundAmount.toLocaleString()} {currency}</p>
+                      )}
+                      {item.walletRefundAmount > 0 && (
+                        <p><span className='text-gray-400'>Hoàn vào ví:</span> {item.walletRefundAmount.toLocaleString()} {currency}</p>
+                      )}
+                      {item.refundFeeAmount > 0 && (
+                        <p><span className='text-gray-400'>Phí hủy:</span> {item.refundFeeAmount.toLocaleString()} {currency}</p>
+                      )}
+                      {item.walletAmountUsed > 0 && (
+                        <p><span className='text-gray-400'>Đã dùng ví:</span> {item.walletAmountUsed.toLocaleString()} {currency}</p>
                       )}
                       {item.checkedInAt && (
                         <p><span className='text-gray-400'>Check-in lúc:</span> {dateFormat(item.checkedInAt)}</p>

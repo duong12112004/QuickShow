@@ -9,9 +9,13 @@ import {
     STATUS_ACTOR,
     appendBookingHistory,
     buildBookingSnapshot,
-    createBookingCode
+    confirmBookingPaid,
+    createBookingCode,
+    markBookingAsCancelled,
+    releaseSeats
 } from "../services/bookingService.js";
 import { getPaidSeatCount, getShowtimeLifecycle, SHOWTIME_STATUS } from "../services/showtimeService.js";
+import { debitWallet, getOrCreateWallet, reverseWalletDebit } from "../services/walletService.js";
 
 const getBookableShowtime = async (showId) => {
     const showData = await Show.findById(showId).populate("movie").populate("room");
@@ -94,9 +98,12 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
 };
 
 export const createBooking = async (req, res) => {
+    let booking = null;
+    let debitedWalletAmount = 0;
+
     try {
         const userId = ensureAuthenticatedUser(req);
-        const { showId, selectedSeats } = req.body;
+        const { showId, selectedSeats, useWallet = false } = req.body;
         const { origin } = req.headers;
 
         const normalizedSeats = validateSelectedSeats(selectedSeats);
@@ -117,9 +124,14 @@ export const createBooking = async (req, res) => {
             selectedSeats: normalizedSeats,
             bookingCode
         });
+        const wallet = useWallet ? await getOrCreateWallet(userId) : null;
+        const walletAmountUsed = useWallet ? Math.min(wallet?.balance || 0, snapshot.amount) : 0;
+        const stripeAmount = Math.max(snapshot.amount - walletAmountUsed, 0);
 
-        const booking = await Booking.create({
+        booking = await Booking.create({
             ...snapshot,
+            walletAmountUsed,
+            stripeAmount,
             bookingStatus: BOOKING_STATUS.PENDING_PAYMENT,
             paymentStatus: PAYMENT_STATUS.UNPAID,
             statusHistory: [{
@@ -136,6 +148,52 @@ export const createBooking = async (req, res) => {
         showData.markModified("heldSeats");
         await showData.save();
 
+        if (walletAmountUsed > 0) {
+            await debitWallet({
+                userId,
+                bookingId: booking._id,
+                amount: walletAmountUsed,
+                note: `Thanh toán booking ${booking.bookingCode} bằng ví QuickShow.`,
+                metadata: {
+                    bookingCode: booking.bookingCode,
+                    showId: showData._id.toString()
+                }
+            });
+            debitedWalletAmount = walletAmountUsed;
+            appendBookingHistory(booking, {
+                status: booking.bookingStatus,
+                paymentStatus: booking.paymentStatus,
+                actor: STATUS_ACTOR.USER,
+                note: `Đã dùng ${walletAmountUsed.toLocaleString("vi-VN")} VND từ ví QuickShow.`
+            });
+        }
+
+        if (stripeAmount <= 0) {
+            await confirmBookingPaid(booking, {
+                actor: STATUS_ACTOR.SYSTEM,
+                note: "Booking được thanh toán toàn bộ bằng ví QuickShow."
+            });
+
+            await inngest.send({
+                name: "app/show.booked",
+                data: { bookingId: booking._id.toString() }
+            });
+
+            const io = req.app.get("io");
+            if (io) {
+                io.to(showData._id.toString()).emit("seats_booked_successfully", booking.bookedSeats);
+            }
+
+            return res.json({
+                success: true,
+                paidWithWallet: true,
+                bookingCode: booking.bookingCode,
+                walletAmountUsed,
+                stripeAmount: 0,
+                expiresAt: null
+            });
+        }
+
         const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
         const session = await stripeInstance.checkout.sessions.create({
             success_url: `${origin}/loading/my-bookings?session_id={CHECKOUT_SESSION_ID}`,
@@ -146,12 +204,17 @@ export const createBooking = async (req, res) => {
                     product_data: {
                         name: `${showData.movie.title} - Mã vé ${booking.bookingCode}`
                     },
-                    unit_amount: Math.floor(booking.amount)
+                    unit_amount: Math.floor(stripeAmount)
                 },
                 quantity: 1
             }],
             mode: "payment",
-            metadata: { bookingId: booking._id.toString(), bookingCode: booking.bookingCode },
+            metadata: {
+                bookingId: booking._id.toString(),
+                bookingCode: booking.bookingCode,
+                walletAmountUsed: `${walletAmountUsed}`,
+                stripeAmount: `${stripeAmount}`
+            },
             expires_at: Math.floor(booking.expiresAt.getTime() / 1000)
         });
 
@@ -177,9 +240,39 @@ export const createBooking = async (req, res) => {
             success: true,
             url: session.url,
             bookingCode: booking.bookingCode,
+            walletAmountUsed,
+            stripeAmount,
             expiresAt: booking.expiresAt
         });
     } catch (error) {
+        if (booking) {
+            try {
+                if (debitedWalletAmount > 0) {
+                    await reverseWalletDebit({
+                        userId: booking.user,
+                        bookingId: booking._id,
+                        amount: debitedWalletAmount,
+                        note: `Hoàn lại ví do tạo booking ${booking.bookingCode} thất bại.`,
+                        metadata: { bookingCode: booking.bookingCode }
+                    });
+                }
+
+                await releaseSeats(booking.show, booking.bookedSeats, {
+                    fromHeld: true,
+                    fromOccupied: false
+                });
+
+                markBookingAsCancelled(booking, {
+                    actor: STATUS_ACTOR.SYSTEM,
+                    cancelledBy: "SYSTEM",
+                    reason: `Tạo booking thất bại: ${error.message}`
+                });
+                await booking.save();
+            } catch (cleanupError) {
+                console.error("Không thể rollback booking thất bại:", cleanupError.message);
+            }
+        }
+
         console.log(error.message);
         res.json({
             success: false,

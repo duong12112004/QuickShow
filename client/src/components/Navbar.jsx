@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { assets } from '../assets/assets'
 import { Link, useNavigate } from 'react-router-dom'
-import { MenuIcon, SearchIcon, TicketPlus, XIcon } from 'lucide-react'
+import { MenuIcon, SearchIcon, TicketPlus, WalletIcon, XIcon } from 'lucide-react'
 import { useClerk, UserButton, useUser } from '@clerk/clerk-react'
 import { useAppContext } from '../context/AppContext'
 
@@ -12,7 +12,8 @@ const Navbar = () => {
   const { user } = useUser()
   const { openSignIn } = useClerk()
   const navigate = useNavigate()
-  const { favoriteMovies } = useAppContext()
+  const { favoriteMovies, walletBalance } = useAppContext()
+  const currency = import.meta.env.VITE_CURRENCY
 
   // Hàm xử lý đóng menu trên thiết bị di động và cuộn lên đầu trang
   const handleLinkClick = () => {
@@ -45,7 +46,17 @@ const Navbar = () => {
               Đăng nhập
             </button>
           ) : (
-            <UserButton>
+            <div className='flex items-center gap-3'>
+              <button
+                type='button'
+                onClick={() => navigate('/my-bookings')}
+                className='inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-2 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/15 sm:px-3'
+                title='Ví QuickShow'
+              >
+                <WalletIcon className='h-4 w-4' />
+                <span>{(walletBalance || 0).toLocaleString()} {currency}</span>
+              </button>
+              <UserButton>
               <UserButton.MenuItems>
                 <UserButton.Action 
                   label='Vé của tôi' 
@@ -53,7 +64,8 @@ const Navbar = () => {
                   onClick={() => navigate('/my-bookings')}
                 />
               </UserButton.MenuItems>
-            </UserButton>
+              </UserButton>
+            </div>
           )
         }
       </div>

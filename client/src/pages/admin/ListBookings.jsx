@@ -94,7 +94,7 @@ const ListBookings = () => {
     confirmed: bookings.filter((booking) => booking.bookingStatus === 'CONFIRMED').length,
     refunded: bookings.filter((booking) => booking.paymentStatus === 'REFUNDED').length,
     totalRevenue: bookings
-      .filter((booking) => ['PAID', 'REFUND_PENDING', 'REFUNDED'].includes(booking.paymentStatus))
+      .filter((booking) => ['PAID', 'REFUND_PENDING', 'REFUNDED', 'REFUND_FAILED'].includes(booking.paymentStatus))
       .reduce((sum, booking) => sum + (booking.amount || 0), 0)
   }), [bookings]);
 
@@ -356,6 +356,11 @@ const ListBookings = () => {
               const bookingStatus = getBookingStatusUi(item.bookingStatus);
               const paymentStatus = getPaymentStatusUi(item.paymentStatus);
               const canCancel = ['PENDING_PAYMENT', 'CONFIRMED'].includes(item.bookingStatus);
+              const effectiveRefundAmount = item.refundAmount > 0
+                ? item.refundAmount
+                : item.paymentStatus === 'REFUNDED'
+                  ? item.amount || 0
+                  : 0;
 
               return (
                 <tr key={item._id} className='border-b border-primary/15 align-top even:bg-white/2'>
@@ -385,8 +390,30 @@ const ListBookings = () => {
                       {paymentStatus.label}
                     </span>
                     {item.refundedAt && <p className='mt-2 text-xs text-gray-400'>Hoàn lúc: {dateFormat(item.refundedAt)}</p>}
+                    {effectiveRefundAmount > 0 && (
+                      <p className='mt-2 text-xs text-fuchsia-200'>
+                        {item.refundMethod === 'WALLET' ? 'Ví' : 'Hoàn'}: {effectiveRefundAmount.toLocaleString()} {currency}
+                      </p>
+                    )}
+                    {item.stripeRefundAmount > 0 && (
+                      <p className='mt-1 text-xs text-sky-200'>Stripe: {item.stripeRefundAmount.toLocaleString()} {currency}</p>
+                    )}
+                    {item.walletRefundAmount > 0 && (
+                      <p className='mt-1 text-xs text-emerald-200'>Ví: {item.walletRefundAmount.toLocaleString()} {currency}</p>
+                    )}
+                    {item.refundFeeAmount > 0 && (
+                      <p className='mt-1 text-xs text-amber-200'>Phí hủy: {item.refundFeeAmount.toLocaleString()} {currency}</p>
+                    )}
                   </td>
-                  <td className='p-3 font-medium text-primary'>{(item.amount || 0).toLocaleString()} {currency}</td>
+                  <td className='p-3'>
+                    <p className='font-medium text-primary'>{(item.amount || 0).toLocaleString()} {currency}</p>
+                    {item.walletAmountUsed > 0 && (
+                      <p className='mt-1 text-xs text-gray-400'>Ví: {item.walletAmountUsed.toLocaleString()} {currency}</p>
+                    )}
+                    {item.stripeAmount > 0 && (
+                      <p className='mt-1 text-xs text-gray-400'>Stripe: {item.stripeAmount.toLocaleString()} {currency}</p>
+                    )}
+                  </td>
                   <td className='p-3'>
                     <div className='flex flex-col gap-2'>
                       <button

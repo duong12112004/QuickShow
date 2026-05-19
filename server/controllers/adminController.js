@@ -35,7 +35,8 @@ const PAID_BOOKING_MATCH = {
         $in: [
             PAYMENT_STATUS.PAID,
             PAYMENT_STATUS.REFUND_PENDING,
-            PAYMENT_STATUS.REFUNDED
+            PAYMENT_STATUS.REFUNDED,
+            PAYMENT_STATUS.REFUND_FAILED
         ]
     }
 };
@@ -153,12 +154,27 @@ const serializeBookingsToCsv = (bookings) => {
         "Trạng thái booking",
         "Trạng thái thanh toán",
         "Tổng tiền",
+        "Thanh toán bằng ví",
+        "Thanh toán Stripe",
+        "Số tiền hoàn",
+        "Hoàn Stripe",
+        "Hoàn ví",
+        "Phí hủy",
+        "Tỷ lệ hoàn",
+        "Phương thức hoàn",
         "Lý do hủy",
         "Hoàn tiền lúc",
         "Check-in lúc"
     ];
 
-    const rows = bookings.map((booking) => ([
+    const rows = bookings.map((booking) => {
+        const effectiveRefundAmount = booking.refundAmount > 0
+            ? booking.refundAmount
+            : booking.paymentStatus === PAYMENT_STATUS.REFUNDED
+                ? booking.amount
+                : 0;
+
+        return [
         booking.bookingCode,
         booking.user?.name || "Người dùng đã xóa",
         booking.user?.email || "",
@@ -171,10 +187,19 @@ const serializeBookingsToCsv = (bookings) => {
         booking.bookingStatus,
         booking.paymentStatus,
         booking.amount,
+        booking.walletAmountUsed || 0,
+        booking.stripeAmount || 0,
+        effectiveRefundAmount,
+        booking.stripeRefundAmount || 0,
+        booking.walletRefundAmount || 0,
+        booking.refundFeeAmount || 0,
+        booking.refundRate ? `${Math.round(booking.refundRate * 100)}%` : "",
+        booking.refundMethod || "",
         booking.cancelReason || "",
         booking.refundedAt ? new Date(booking.refundedAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "",
         booking.checkedInAt ? new Date(booking.checkedInAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : ""
-    ].map(formatCsvValue).join(",")));
+        ].map(formatCsvValue).join(",");
+    });
 
     return `\uFEFF${headers.map(formatCsvValue).join(",")}\n${rows.join("\n")}`;
 };
@@ -203,7 +228,15 @@ export const getDashboardData = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    totalRefunds: { $sum: "$refundAmount" }
+                    totalRefunds: {
+                        $sum: {
+                            $cond: [
+                                { $gt: [{ $ifNull: ["$refundAmount", 0] }, 0] },
+                                "$refundAmount",
+                                "$amount"
+                            ]
+                        }
+                    }
                 }
             }
         ]);
@@ -558,8 +591,17 @@ export const cancelAdminBooking = async (req, res) => {
         res.json({
             success: true,
             message: result.refund
-                ? "Đã hủy booking và gửi yêu cầu hoàn tiền trên Stripe test."
-                : "Đã hủy booking thành công."
+                ? `Đã hủy booking và hoàn ${Math.round((result.refundRate || 0) * 100)}% vào ví QuickShow: ${(result.walletRefundAmount || 0).toLocaleString("vi-VN")} VND.`
+                : "Đã hủy booking thành công.",
+            refund: {
+                amount: result.refundAmount || 0,
+                stripeAmount: result.stripeRefundAmount || 0,
+                walletAmount: result.walletRefundAmount || 0,
+                stripeRefundId: result.stripeRefund?.id || "",
+                feeAmount: result.refundFeeAmount || 0,
+                rate: result.refundRate || 0,
+                method: result.refundPolicy?.refundMethod || ""
+            }
         });
     } catch (error) {
         console.error(error);

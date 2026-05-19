@@ -11,6 +11,7 @@ import {
     reconcileLegacyBookingState,
     syncBookingPaymentWithStripe
 } from "../services/bookingService.js";
+import { getWalletSummary } from "../services/walletService.js";
 
 const ensureAuthenticatedUser = (req) => {
     const userId = req.auth?.()?.userId;
@@ -52,6 +53,18 @@ export const getUserBookings = async (req, res) => {
     } catch (error) {
         console.error(error.message);
         res.json({ success: false, message: "Lỗi khi tải lịch sử đặt vé: " + error.message });
+    }
+};
+
+export const getMyWallet = async (req, res) => {
+    try {
+        const userId = ensureAuthenticatedUser(req);
+        const wallet = await getWalletSummary(userId);
+
+        res.json({ success: true, wallet });
+    } catch (error) {
+        console.error(error.message);
+        res.json({ success: false, message: "Lỗi khi tải ví QuickShow: " + error.message });
     }
 };
 
@@ -146,7 +159,13 @@ export const cancelMyBooking = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Đã hủy booking và gửi yêu cầu hoàn tiền trên Stripe test."
+            message: `Đã hủy booking và cộng ${Math.round((result.refundRate || 0) * 100)}% vào ví QuickShow. Phí hủy: ${(result.refundFeeAmount || 0).toLocaleString("vi-VN")} VND.`,
+            refund: {
+                amount: result.refundAmount || 0,
+                feeAmount: result.refundFeeAmount || 0,
+                rate: result.refundRate || 0,
+                method: result.refundPolicy?.refundMethod || "WALLET"
+            }
         });
     } catch (error) {
         console.error(error.message);

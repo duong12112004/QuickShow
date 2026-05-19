@@ -12,6 +12,7 @@ import { socket } from '../configs/socket';
 // Component hiển thị sơ đồ ghế ngồi và xử lý luồng đặt vé Real-time
 const SeatLayout = () => {
   const { id, date } = useParams()
+  const navigate = useNavigate()
   const [selectedSeats, setSelectedSeats] = useState([])
   const [selectedTime, setSelectedTime] = useState(null)
   const [show, setShow] = useState(null)
@@ -21,11 +22,12 @@ const SeatLayout = () => {
   const [occupiedSeats, setOccupiedSeats] = useState([])
   const [roomData, setRoomData] = useState(null) 
   const [basePrice, setBasePrice] = useState(0)
+  const [useWallet, setUseWallet] = useState(true)
 
   // Quản lý trạng thái ghế đang được người dùng khác click xem (Real-time)
   const [liveViewingSeats, setLiveViewingSeats] = useState([])
 
-  const { axios, getToken, user } = useAppContext()
+  const { axios, getToken, user, walletBalance, fetchWallet } = useAppContext()
   const currency = import.meta.env.VITE_CURRENCY
 
   // Lấy thông tin chi tiết của phim và lịch chiếu
@@ -137,12 +139,20 @@ const SeatLayout = () => {
 
       const { data } = await axios.post('/api/booking/create', {
         showId: selectedTime.showId,
-        selectedSeats
+        selectedSeats,
+        useWallet
       }, {
         headers: { Authorization: `Bearer ${await getToken()}` }
       })
 
       if (data.success) {
+        if (data.paidWithWallet) {
+          toast.success('Đã thanh toán bằng ví QuickShow.')
+          await fetchWallet()
+          navigate('/my-bookings')
+          return
+        }
+
         window.location.href = data.url;
       } else {
         toast.error(data.message)
@@ -168,7 +178,19 @@ const SeatLayout = () => {
     return total;
   };
 
+  const totalPrice = calculateTotalPrice()
+  const walletAmountUsed = useWallet ? Math.min(walletBalance, totalPrice) : 0
+  const stripeAmount = Math.max(totalPrice - walletAmountUsed, 0)
+
   useEffect(() => { getShow() }, [])
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchWallet()
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
+  }, [user])
 
   useEffect(() => {
     if (selectedTime) {
@@ -290,9 +312,36 @@ const SeatLayout = () => {
           </div>
         )}
 
-        <button onClick={bookTickets} className='flex items-center gap-2 mt-12 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95'>
-          Tiến hành thanh toán
-          {selectedSeats.length > 0 && ` | ${calculateTotalPrice().toLocaleString()} ${currency}`}
+        {selectedSeats.length > 0 && (
+          <div className='mt-10 w-full max-w-md rounded-2xl border border-primary/20 bg-primary/8 p-4 text-sm text-gray-300'>
+            <div className='flex items-center justify-between gap-4'>
+              <div>
+                <p className='font-medium text-white'>Ví QuickShow</p>
+                <p className='mt-1 text-xs text-gray-400'>Số dư: {walletBalance.toLocaleString()} {currency}</p>
+              </div>
+              <label className='inline-flex items-center gap-2 text-xs text-gray-200'>
+                <input
+                  type='checkbox'
+                  checked={useWallet}
+                  onChange={(event) => setUseWallet(event.target.checked)}
+                  disabled={walletBalance <= 0}
+                  className='h-4 w-4 accent-primary'
+                />
+                Dùng ví
+              </label>
+            </div>
+            {useWallet && walletAmountUsed > 0 && (
+              <div className='mt-3 space-y-1 border-t border-white/10 pt-3 text-xs'>
+                <p className='flex justify-between'><span>Trừ từ ví</span><span>{walletAmountUsed.toLocaleString()} {currency}</span></p>
+                <p className='flex justify-between'><span>Còn thanh toán Stripe</span><span>{stripeAmount.toLocaleString()} {currency}</span></p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button onClick={bookTickets} className='flex items-center gap-2 mt-6 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95'>
+          {stripeAmount === 0 && selectedSeats.length > 0 ? 'Thanh toán bằng ví' : 'Tiến hành thanh toán'}
+          {selectedSeats.length > 0 && ` | ${totalPrice.toLocaleString()} ${currency}`}
           <ArrowRightIcon strokeWidth={3} className='h-4 w-4 ml-2' />
         </button>
       </div>

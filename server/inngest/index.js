@@ -12,6 +12,7 @@ import {
     setBookingStatuses
 } from "../services/bookingService.js";
 import { getShowtimeLifecycle } from "../services/showtimeService.js";
+import { reverseWalletDebit } from "../services/walletService.js";
 
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
 
@@ -66,8 +67,7 @@ const expireUnpaidBookings = inngest.createFunction(
         triggers: { event: "app/checkpayment" }
     },
     async ({ event, step }) => {
-        //const expiresAt = new Date(event.data.expiresAt || Date.now());
-        const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
+        const expiresAt = new Date(event.data.expiresAt || Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000);
         await step.sleepUntil("wait-until-booking-expired", expiresAt);
 
         await step.run("expire-booking-and-release-seats", async () => {
@@ -90,6 +90,18 @@ const expireUnpaidBookings = inngest.createFunction(
             });
             booking.paymentLink = "";
             await booking.save();
+
+            if (booking.walletAmountUsed > 0) {
+                await reverseWalletDebit({
+                    userId: booking.user,
+                    bookingId: booking._id,
+                    amount: booking.walletAmountUsed,
+                    note: `Hoàn lại ví vì booking ${booking.bookingCode} hết hạn thanh toán.`,
+                    metadata: { bookingCode: booking.bookingCode }
+                });
+                booking.walletAmountUsed = 0;
+                await booking.save();
+            }
 
             await releaseSeats(booking.show, booking.bookedSeats, {
                 fromHeld: true,

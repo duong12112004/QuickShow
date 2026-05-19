@@ -14,6 +14,7 @@ export const AppProvider = ({ children }) => {
     const [isAdmin, setIsAdmin] = useState(false);
     const [shows, setShows] = useState([]);
     const [favoriteMovies, setFavoriteMovies] = useState([]);
+    const [wallet, setWallet] = useState({ balance: 0, transactions: [] });
 
     const image_base_url = import.meta.env.VITE_TMDB_IMAGE_BASE_URL;
 
@@ -76,6 +77,31 @@ export const AppProvider = ({ children }) => {
         }
     };
 
+    const fetchWallet = async () => {
+        if (!user) {
+            setWallet({ balance: 0, transactions: [] });
+            return { balance: 0, transactions: [] };
+        }
+
+        try {
+            const { data } = await axios.get('/api/user/wallet', {
+                headers: { Authorization: `Bearer ${await getToken()}` }
+            });
+
+            if (data.success) {
+                const nextWallet = data.wallet || { balance: 0, transactions: [] };
+                setWallet(nextWallet);
+                return nextWallet;
+            }
+
+            toast.error(data.message);
+        } catch (error) {
+            console.error(error);
+        }
+
+        return wallet;
+    };
+
     // --- KHỐI SIDE EFFECTS (VÒNG ĐỜI COMPONENT) ---
 
     // Tự động tải dữ liệu suất chiếu ngay khi ứng dụng vừa khởi chạy
@@ -88,6 +114,9 @@ export const AppProvider = ({ children }) => {
         if (user) {
             fetchIsAdmin();
             fetchFavoriteMovies();
+            fetchWallet();
+        } else {
+            setWallet({ balance: 0, transactions: [] });
         }
     }, [user]);
 
@@ -103,6 +132,9 @@ export const AppProvider = ({ children }) => {
         shows,
         favoriteMovies,
         fetchFavoriteMovies,
+        wallet,
+        walletBalance: wallet.balance || 0,
+        fetchWallet,
         image_base_url
     };
 
