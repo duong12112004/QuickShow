@@ -5,6 +5,7 @@ import { inngest } from "../inngest/index.js";
 import {
     BOOKING_STATUS,
     PAYMENT_STATUS,
+    REFUND_METHOD,
     STATUS_ACTOR,
     cancelBookingAndHandlePayment,
     canAdminCancelBooking,
@@ -47,6 +48,219 @@ const BOOKING_FINAL_STATUSES = [
     BOOKING_STATUS.REFUNDED,
     BOOKING_STATUS.NO_SHOW
 ];
+
+const DASHBOARD_TIMEZONE = "Asia/Ho_Chi_Minh";
+const DASHBOARD_RANGE_OPTIONS = [7, 14, 30];
+const DASHBOARD_DAY_MS = 24 * 60 * 60 * 1000;
+const DASHBOARD_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+const DASHBOARD_STATUS_LABELS = {
+    [BOOKING_STATUS.CONFIRMED]: "Đã xác nhận",
+    [BOOKING_STATUS.CHECKED_IN]: "Đã check-in",
+    [BOOKING_STATUS.REFUND_PENDING]: "Chờ hoàn tiền",
+    [BOOKING_STATUS.REFUNDED]: "Đã hoàn tiền",
+    [BOOKING_STATUS.NO_SHOW]: "Vắng mặt",
+    [BOOKING_STATUS.CANCELLED]: "Đã hủy",
+    [BOOKING_STATUS.PENDING_PAYMENT]: "Chờ thanh toán",
+    [BOOKING_STATUS.PAYMENT_EXPIRED]: "Hết hạn thanh toán"
+};
+
+const DASHBOARD_STATUS_ORDER = [
+    BOOKING_STATUS.CONFIRMED,
+    BOOKING_STATUS.CHECKED_IN,
+    BOOKING_STATUS.REFUND_PENDING,
+    BOOKING_STATUS.REFUNDED,
+    BOOKING_STATUS.NO_SHOW,
+    BOOKING_STATUS.CANCELLED,
+    BOOKING_STATUS.PENDING_PAYMENT,
+    BOOKING_STATUS.PAYMENT_EXPIRED
+];
+
+const parseDashboardRangeDays = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return DASHBOARD_RANGE_OPTIONS.includes(parsed) ? parsed : 7;
+};
+
+const getDashboardDayStart = (date = new Date()) => {
+    const shifted = new Date(date.getTime() + DASHBOARD_UTC_OFFSET_MS);
+    const shiftedMidnightUtc = Date.UTC(
+        shifted.getUTCFullYear(),
+        shifted.getUTCMonth(),
+        shifted.getUTCDate()
+    );
+
+    return new Date(shiftedMidnightUtc - DASHBOARD_UTC_OFFSET_MS);
+};
+
+const formatDateParts = (date) => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: DASHBOARD_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).formatToParts(date);
+
+    return parts.reduce((acc, part) => {
+        if (part.type !== "literal") {
+            acc[part.type] = part.value;
+        }
+        return acc;
+    }, {});
+};
+
+const formatDashboardDateKey = (date) => {
+    const parts = formatDateParts(date);
+    return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const formatDashboardDateLabel = (date) => {
+    const parts = formatDateParts(date);
+    return `${parts.day}/${parts.month}`;
+};
+
+const getDashboardRange = (rangeDays) => {
+    const start = getDashboardDayStart();
+    const endExclusive = new Date(start.getTime() + rangeDays * DASHBOARD_DAY_MS);
+    const upcomingStart = new Date(Math.max(Date.now(), start.getTime()));
+
+    return {
+        start,
+        endExclusive,
+        upcomingStart,
+        days: Array.from({ length: rangeDays }, (_, index) => {
+            const date = new Date(start.getTime() + index * DASHBOARD_DAY_MS);
+            return {
+                date,
+                key: formatDashboardDateKey(date),
+                label: formatDashboardDateLabel(date)
+            };
+        })
+    };
+};
+
+const buildEffectiveRefundExpression = () => ({
+    $cond: [
+        { $gt: [{ $ifNull: ["$refundAmount", 0] }, 0] },
+        { $ifNull: ["$refundAmount", 0] },
+        {
+            $cond: [
+                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUNDED] },
+                { $ifNull: ["$amount", 0] },
+                0
+            ]
+        }
+    ]
+});
+
+const buildWalletRefundExpression = () => {
+    const effectiveRefund = buildEffectiveRefundExpression();
+
+    return {
+        $let: {
+            vars: {
+                effectiveRefund,
+                explicitWalletRefund: { $ifNull: ["$walletRefundAmount", null] }
+            },
+            in: {
+                $cond: [
+                    { $ne: ["$$explicitWalletRefund", null] },
+                    "$$explicitWalletRefund",
+                    {
+                        $switch: {
+                            branches: [
+                                {
+                                    case: { $eq: ["$refundMethod", REFUND_METHOD.WALLET] },
+                                    then: "$$effectiveRefund"
+                                },
+                                {
+                                    case: { $eq: ["$refundMethod", REFUND_METHOD.STRIPE] },
+                                    then: 0
+                                },
+                                {
+                                    case: { $eq: ["$refundMethod", REFUND_METHOD.MIXED] },
+                                    then: {
+                                        $min: [
+                                            { $ifNull: ["$walletAmountUsed", 0] },
+                                            "$$effectiveRefund"
+                                        ]
+                                    }
+                                },
+                                {
+                                    case: {
+                                        $gt: [
+                                            { $strLenCP: { $ifNull: ["$stripeRefundId", ""] } },
+                                            0
+                                        ]
+                                    },
+                                    then: 0
+                                }
+                            ],
+                            default: "$$effectiveRefund"
+                        }
+                    }
+                ]
+            }
+        }
+    };
+};
+
+const buildStripeRefundExpression = () => {
+    const effectiveRefund = buildEffectiveRefundExpression();
+
+    return {
+        $let: {
+            vars: {
+                effectiveRefund,
+                explicitStripeRefund: { $ifNull: ["$stripeRefundAmount", null] },
+                inferredWalletRefund: {
+                    $min: [
+                        { $ifNull: ["$walletAmountUsed", 0] },
+                        effectiveRefund
+                    ]
+                }
+            },
+            in: {
+                $cond: [
+                    { $ne: ["$$explicitStripeRefund", null] },
+                    "$$explicitStripeRefund",
+                    {
+                        $switch: {
+                            branches: [
+                                {
+                                    case: { $eq: ["$refundMethod", REFUND_METHOD.STRIPE] },
+                                    then: "$$effectiveRefund"
+                                },
+                                {
+                                    case: { $eq: ["$refundMethod", REFUND_METHOD.WALLET] },
+                                    then: 0
+                                },
+                                {
+                                    case: { $eq: ["$refundMethod", REFUND_METHOD.MIXED] },
+                                    then: {
+                                        $max: [
+                                            { $subtract: ["$$effectiveRefund", "$$inferredWalletRefund"] },
+                                            0
+                                        ]
+                                    }
+                                },
+                                {
+                                    case: {
+                                        $gt: [
+                                            { $strLenCP: { $ifNull: ["$stripeRefundId", ""] } },
+                                            0
+                                        ]
+                                    },
+                                    then: "$$effectiveRefund"
+                                }
+                            ],
+                            default: 0
+                        }
+                    }
+                ]
+            }
+        }
+    };
+};
 
 const emitSeatsReleased = (req, showId, seats = []) => {
     const io = req.app.get("io");
@@ -208,50 +422,253 @@ export const isAdmin = async (req, res) => {
 
 export const getDashboardData = async (req, res) => {
     try {
-        const [paidStats] = await Booking.aggregate([
-            { $match: PAID_BOOKING_MATCH },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: "$amount" },
-                    totalBookings: { $sum: 1 }
-                }
-            }
-        ]);
+        const rangeDays = parseDashboardRangeDays(req.query?.rangeDays);
+        const { start, endExclusive, upcomingStart, days } = getDashboardRange(rangeDays);
+        const rangeMatch = { showDateTime: { $gte: start, $lt: endExclusive } };
+        const paidRangeMatch = {
+            ...PAID_BOOKING_MATCH,
+            ...rangeMatch
+        };
+        const effectiveRefund = buildEffectiveRefundExpression();
+        const walletRefund = buildWalletRefundExpression();
+        const stripeRefund = buildStripeRefundExpression();
 
-        const [refundStats] = await Booking.aggregate([
-            { $match: { paymentStatus: PAYMENT_STATUS.REFUNDED } },
-            {
-                $group: {
-                    _id: null,
-                    totalRefunds: {
-                        $sum: {
+        const [
+            [summary],
+            revenueTrendRows,
+            bookingStatusRows,
+            topMovieRows,
+            scheduledShows,
+            totalUser
+        ] = await Promise.all([
+            Booking.aggregate([
+                { $match: paidRangeMatch },
+                {
+                    $addFields: {
+                        effectiveRefund,
+                        settledRefund: {
                             $cond: [
-                                { $gt: [{ $ifNull: ["$refundAmount", 0] }, 0] },
-                                "$refundAmount",
-                                "$amount"
+                                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUNDED] },
+                                effectiveRefund,
+                                0
                             ]
+                        },
+                        pendingRefundAmount: {
+                            $cond: [
+                                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUND_PENDING] },
+                                effectiveRefund,
+                                0
+                            ]
+                        },
+                        settledWalletRefund: {
+                            $cond: [
+                                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUNDED] },
+                                walletRefund,
+                                0
+                            ]
+                        },
+                        settledStripeRefund: {
+                            $cond: [
+                                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUNDED] },
+                                stripeRefund,
+                                0
+                            ]
+                        },
+                        ticketCount: {
+                            $size: { $ifNull: ["$bookedSeats", []] }
                         }
                     }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalBookings: { $sum: 1 },
+                        totalTickets: { $sum: "$ticketCount" },
+                        grossRevenue: { $sum: { $ifNull: ["$amount", 0] } },
+                        totalRefunds: { $sum: "$settledRefund" },
+                        walletRefunds: { $sum: "$settledWalletRefund" },
+                        stripeRefunds: { $sum: "$settledStripeRefund" },
+                        refundPendingAmount: { $sum: "$pendingRefundAmount" }
+                    }
                 }
-            }
+            ]),
+            Booking.aggregate([
+                { $match: paidRangeMatch },
+                {
+                    $addFields: {
+                        settledRefund: {
+                            $cond: [
+                                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUNDED] },
+                                effectiveRefund,
+                                0
+                            ]
+                        },
+                        ticketCount: {
+                            $size: { $ifNull: ["$bookedSeats", []] }
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            $dateToString: {
+                                format: "%Y-%m-%d",
+                                date: "$showDateTime",
+                                timezone: DASHBOARD_TIMEZONE
+                            }
+                        },
+                        grossRevenue: { $sum: { $ifNull: ["$amount", 0] } },
+                        refundAmount: { $sum: "$settledRefund" },
+                        tickets: { $sum: "$ticketCount" },
+                        bookings: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            Booking.aggregate([
+                { $match: paidRangeMatch },
+                {
+                    $group: {
+                        _id: "$bookingStatus",
+                        value: { $sum: 1 }
+                    }
+                }
+            ]),
+            Booking.aggregate([
+                { $match: paidRangeMatch },
+                {
+                    $addFields: {
+                        movieTitleSafe: {
+                            $ifNull: ["$movieTitle", "Chưa có tên phim"]
+                        },
+                        settledRefund: {
+                            $cond: [
+                                { $eq: ["$paymentStatus", PAYMENT_STATUS.REFUNDED] },
+                                effectiveRefund,
+                                0
+                            ]
+                        },
+                        ticketCount: {
+                            $size: { $ifNull: ["$bookedSeats", []] }
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$movieTitleSafe",
+                        tickets: { $sum: "$ticketCount" },
+                        grossRevenue: { $sum: { $ifNull: ["$amount", 0] } },
+                        refundAmount: { $sum: "$settledRefund" }
+                    }
+                },
+                {
+                    $addFields: {
+                        netRevenue: { $subtract: ["$grossRevenue", "$refundAmount"] }
+                    }
+                },
+                { $sort: { netRevenue: -1, tickets: -1, _id: 1 } },
+                { $limit: 6 },
+                {
+                    $project: {
+                        _id: 0,
+                        movieTitle: "$_id",
+                        tickets: 1,
+                        grossRevenue: 1,
+                        refundAmount: 1,
+                        netRevenue: 1
+                    }
+                }
+            ]),
+            Show.find({
+                showDateTime: { $gte: upcomingStart, $lt: endExclusive },
+                ...buildScheduledShowtimeFilter()
+            })
+                .populate("movie")
+                .populate("room")
+                .sort({ showDateTime: 1 }),
+            User.countDocuments()
         ]);
 
-        const activeShows = await Show.find({
-            showDateTime: { $gte: new Date() },
-            ...buildScheduledShowtimeFilter()
-        })
-            .populate("movie")
-            .sort({ showDateTime: 1 });
+        const revenueTrendMap = new Map(
+            revenueTrendRows.map((row) => [
+                row._id,
+                {
+                    date: row._id,
+                    label: formatDashboardDateLabel(new Date(`${row._id}T00:00:00+07:00`)),
+                    grossRevenue: row.grossRevenue || 0,
+                    refundAmount: row.refundAmount || 0,
+                    netRevenue: Math.max((row.grossRevenue || 0) - (row.refundAmount || 0), 0),
+                    tickets: row.tickets || 0,
+                    bookings: row.bookings || 0
+                }
+            ])
+        );
 
-        const totalUser = await User.countDocuments();
+        const revenueTrend = days.map((day) => (
+            revenueTrendMap.get(day.key) || {
+                date: day.key,
+                label: day.label,
+                grossRevenue: 0,
+                refundAmount: 0,
+                netRevenue: 0,
+                tickets: 0,
+                bookings: 0
+            }
+        ));
+
+        const bookingStatusBreakdown = bookingStatusRows
+            .map((row) => ({
+                status: row._id,
+                label: DASHBOARD_STATUS_LABELS[row._id] || row._id,
+                value: row.value || 0
+            }))
+            .sort((a, b) => {
+                const left = DASHBOARD_STATUS_ORDER.indexOf(a.status);
+                const right = DASHBOARD_STATUS_ORDER.indexOf(b.status);
+                return (left === -1 ? 999 : left) - (right === -1 ? 999 : right);
+            });
+
+        const revenueMap = await buildRevenueMap(scheduledShows.map((showtime) => showtime._id));
+        const now = new Date();
+        const upcomingShows = scheduledShows.slice(0, 8).map((showtime) => {
+            const baseShowtime = serializeAdminShowtime(showtime, now);
+            const totals = revenueMap.get(showtime._id.toString());
+
+            return {
+                _id: baseShowtime._id,
+                movie: baseShowtime.movie,
+                room: baseShowtime.room,
+                showDateTime: baseShowtime.showDateTime,
+                basePrice: baseShowtime.basePrice,
+                soldSeatCount: baseShowtime.soldSeatCount,
+                heldSeatCount: baseShowtime.heldSeatCount,
+                totalEarnings: totals?.totalEarnings || 0
+            };
+        });
+
+        const grossRevenue = summary?.grossRevenue || 0;
+        const totalRefunds = summary?.totalRefunds || 0;
+        const walletRefunds = summary?.walletRefunds || 0;
+        const stripeRefunds = summary?.stripeRefunds || 0;
+        const netRevenue = Math.max(grossRevenue - totalRefunds, 0);
 
         const dashboardData = {
-            totalBookings: paidStats?.totalBookings || 0,
-            totalRevenue: Math.max((paidStats?.totalRevenue || 0) - (refundStats?.totalRefunds || 0), 0),
-            totalRefunds: refundStats?.totalRefunds || 0,
-            activeShows,
-            totalUser
+            rangeDays,
+            totalBookings: summary?.totalBookings || 0,
+            totalTickets: summary?.totalTickets || 0,
+            totalRevenue: netRevenue,
+            grossRevenue,
+            netRevenue,
+            totalRefunds,
+            walletRefunds,
+            stripeRefunds,
+            refundPendingAmount: summary?.refundPendingAmount || 0,
+            activeShows: scheduledShows.length,
+            totalUser,
+            revenueTrend,
+            bookingStatusBreakdown,
+            topMovies: topMovieRows,
+            upcomingShows
         };
 
         res.json({ success: true, dashboardData });
