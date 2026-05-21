@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import Loading from '../components/Loading'
 import { ArrowRightIcon, ClockIcon } from 'lucide-react'
@@ -12,6 +12,7 @@ import { socket } from '../configs/socket';
 // Component hiển thị sơ đồ ghế ngồi và xử lý luồng đặt vé Real-time
 const SeatLayout = () => {
   const { id, date } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const [selectedSeats, setSelectedSeats] = useState([])
   const [selectedTime, setSelectedTime] = useState(null)
@@ -29,6 +30,7 @@ const SeatLayout = () => {
 
   const { axios, getToken, user, walletBalance, fetchWallet } = useAppContext()
   const currency = import.meta.env.VITE_CURRENCY
+  const preferredShowId = new URLSearchParams(location.search).get('showId')
 
   // Lấy thông tin chi tiết của phim và lịch chiếu
   const getShow = async () => {
@@ -182,7 +184,23 @@ const SeatLayout = () => {
   const walletAmountUsed = useWallet ? Math.min(walletBalance, totalPrice) : 0
   const stripeAmount = Math.max(totalPrice - walletAmountUsed, 0)
 
-  useEffect(() => { getShow() }, [])
+  useEffect(() => {
+    getShow()
+  }, [id])
+
+  useEffect(() => {
+    if (!show?.dateTime?.[date]) return
+
+    if (preferredShowId) {
+      const preferredShow = show.dateTime[date].find((item) => item.showId === preferredShowId)
+      if (preferredShow) {
+        setSelectedTime(preferredShow)
+        return
+      }
+    }
+
+    setSelectedTime(null)
+  }, [show, date, preferredShowId])
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {

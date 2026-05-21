@@ -32,8 +32,7 @@ const Navbar = () => {
 
         <Link onClick={handleLinkClick} to='/'>Trang chủ</Link>
         <Link onClick={handleLinkClick} to='/movies'>Phim</Link>
-        <Link onClick={handleLinkClick} to='/'>Rạp chiếu</Link>
-        <Link onClick={handleLinkClick} to='/'>Tin tức</Link>
+        <Link onClick={handleLinkClick} to='/schedule'>Lịch chiếu</Link>
         {favoriteMovies.length > 0 && <Link onClick={handleLinkClick} to='/favorite'>Phim yêu thích</Link>}
 
       </div>

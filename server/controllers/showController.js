@@ -103,6 +103,62 @@ export const getShows = async (req, res) => {
     }
 };
 
+export const getShowSchedule = async (req, res) => {
+    try {
+        const shows = await Show.find({
+            showDateTime: { $gte: new Date() },
+            ...buildScheduledShowtimeFilter()
+        })
+            .populate("movie")
+            .populate("room")
+            .sort({ showDateTime: 1 });
+
+        const scheduleMap = new Map();
+
+        shows
+            .filter((show) => show.movie && show.room && (!show.room.status || show.room.status === "ACTIVE"))
+            .forEach((show) => {
+                const date = new Date(show.showDateTime).toLocaleDateString("en-CA", {
+                    timeZone: "Asia/Ho_Chi_Minh"
+                });
+
+                if (!scheduleMap.has(date)) {
+                    scheduleMap.set(date, new Map());
+                }
+
+                const moviesMap = scheduleMap.get(date);
+                const movieId = show.movie._id.toString();
+
+                if (!moviesMap.has(movieId)) {
+                    moviesMap.set(movieId, {
+                        movie: show.movie,
+                        showtimes: [],
+                        minPrice: show.basePrice
+                    });
+                }
+
+                const movieEntry = moviesMap.get(movieId);
+                movieEntry.minPrice = Math.min(movieEntry.minPrice, show.basePrice);
+                movieEntry.showtimes.push({
+                    showId: show._id,
+                    time: show.showDateTime,
+                    roomName: show.room.name,
+                    basePrice: show.basePrice
+                });
+            });
+
+        const schedule = Array.from(scheduleMap.entries()).map(([date, moviesMap]) => ({
+            date,
+            movies: Array.from(moviesMap.values())
+        }));
+
+        res.json({ success: true, schedule });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: "Lỗi khi tải lịch chiếu: " + error.message });
+    }
+};
+
 export const getShow = async (req, res) => {
     try {
         const { movieId } = req.params;

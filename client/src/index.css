@@ -30,6 +30,36 @@ body{
   }
 }
 
+.schedule-date-viewport {
+  --visible-count: 7;
+  --schedule-offset: 0;
+  --schedule-date-gap: 0.5rem;
+}
+
+.schedule-date-track {
+  display: flex;
+  gap: var(--schedule-date-gap);
+  transform: translateX(calc((((100% - (var(--visible-count) - 1) * var(--schedule-date-gap)) / var(--visible-count)) + var(--schedule-date-gap)) * var(--schedule-offset) * -1));
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.schedule-date-item {
+  flex: 0 0 calc((100% - (var(--visible-count) - 1) * var(--schedule-date-gap)) / var(--visible-count));
+}
+
+@media (min-width: 640px) {
+  .schedule-date-viewport {
+    --schedule-date-gap: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schedule-date-track {
+    transition: none;
+  }
+}
+
 .no-scrollbar{
   scrollbar-width: none;
 }
