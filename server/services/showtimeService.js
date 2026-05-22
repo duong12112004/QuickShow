@@ -200,39 +200,194 @@ export const ensureRoomIsActive = async (roomId) => {
     return room;
 };
 
+const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
+
+const buildTmdbConfig = () => ({
+    headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
+});
+
+const hasText = (value) => `${value || ""}`.trim().length > 0;
+
+const pickText = (...values) => values.find(hasText) || "";
+
+const pickArray = (...values) => values.find((value) => Array.isArray(value) && value.length > 0) || [];
+
+const normalizeImdbRating = (value) => {
+    const numericValue = Number.parseFloat(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const pickTrailer = (...videoGroups) => {
+    const videos = videoGroups
+        .flatMap((group) => group?.results || [])
+        .filter((video) => video.site === "YouTube" && video.key);
+
+    return videos.find((video) => video.type === "Trailer" && video.official)
+        || videos.find((video) => video.type === "Trailer")
+        || videos.find((video) => video.type === "Teaser")
+        || videos[0]
+        || null;
+};
+
+const pickDirector = (credits) => {
+    const directors = (credits?.crew || [])
+        .filter((member) => member.job === "Director")
+        .map((member) => member.name)
+        .filter(Boolean);
+
+    return [...new Set(directors)].join(", ");
+};
+
+const pickCertificationFromCountry = (releaseDates, countryCode) => {
+    const countryRelease = (releaseDates?.results || []).find((item) => item.iso_3166_1 === countryCode);
+    const certification = countryRelease?.release_dates
+        ?.map((releaseDate) => releaseDate.certification)
+        .find(hasText);
+
+    return certification || "";
+};
+
+const pickCertification = (releaseDates) => {
+    const vietnamCertification = pickCertificationFromCountry(releaseDates, "VN");
+
+    if (vietnamCertification) {
+        return {
+            certification: vietnamCertification,
+            certificationCountry: "VN"
+        };
+    }
+
+    const usCertification = pickCertificationFromCountry(releaseDates, "US");
+
+    if (usCertification) {
+        return {
+            certification: usCertification,
+            certificationCountry: "US"
+        };
+    }
+
+    return {
+        certification: "",
+        certificationCountry: ""
+    };
+};
+
+const fetchOmdbRating = async (imdbId) => {
+    if (!process.env.OMDB_API_KEY || !imdbId) {
+        return {
+            imdb_rating: null,
+            imdb_votes: ""
+        };
+    }
+
+    try {
+        const { data } = await axios.get("https://www.omdbapi.com/", {
+            params: {
+                i: imdbId,
+                apikey: process.env.OMDB_API_KEY
+            }
+        });
+
+        if (data?.Response === "False") {
+            return {
+                imdb_rating: null,
+                imdb_votes: ""
+            };
+        }
+
+        return {
+            imdb_rating: normalizeImdbRating(data.imdbRating),
+            imdb_votes: data.imdbVotes || ""
+        };
+    } catch (error) {
+        console.error(`[OMDb] Không thể lấy điểm IMDb cho ${imdbId}:`, error.message);
+        return {
+            imdb_rating: null,
+            imdb_votes: ""
+        };
+    }
+};
+
+const buildMoviePayload = async (movieId) => {
+    const [viResponse, enResponse] = await Promise.all([
+        axios.get(`${TMDB_API_BASE_URL}/movie/${movieId}`, {
+            ...buildTmdbConfig(),
+            params: {
+                language: "vi-VN",
+                append_to_response: "credits,videos,external_ids,release_dates"
+            }
+        }),
+        axios.get(`${TMDB_API_BASE_URL}/movie/${movieId}`, {
+            ...buildTmdbConfig(),
+            params: {
+                language: "en-US",
+                append_to_response: "videos,external_ids,release_dates"
+            }
+        })
+    ]);
+
+    const viData = viResponse.data;
+    const enData = enResponse.data;
+    const externalIds = viData.external_ids || enData.external_ids || {};
+    const imdbId = externalIds.imdb_id || "";
+    const imdbRating = await fetchOmdbRating(imdbId);
+    const trailer = pickTrailer(viData.videos, enData.videos);
+    const certification = pickCertification(viData.release_dates || enData.release_dates);
+
+    return {
+        _id: movieId,
+        title: pickText(enData.title, viData.title, enData.original_title, viData.original_title),
+        titleVi: pickText(viData.title, enData.title, viData.original_title, enData.original_title),
+        overview: pickText(enData.overview, viData.overview),
+        overviewVi: pickText(viData.overview, enData.overview),
+        poster_path: pickText(viData.poster_path, enData.poster_path),
+        backdrop_path: pickText(viData.backdrop_path, enData.backdrop_path),
+        release_date: pickText(viData.release_date, enData.release_date),
+        original_title: pickText(viData.original_title, enData.original_title),
+        original_language: pickText(viData.original_language, enData.original_language),
+        tagline: pickText(enData.tagline, viData.tagline),
+        taglineVi: pickText(viData.tagline, enData.tagline),
+        genres: pickArray(enData.genres, viData.genres),
+        genresVi: pickArray(viData.genres, enData.genres),
+        casts: viData.credits?.cast || [],
+        vote_average: viData.vote_average || enData.vote_average || 0,
+        vote_count: viData.vote_count || enData.vote_count || 0,
+        imdb_id: imdbId,
+        ...imdbRating,
+        trailerUrl: trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : "",
+        trailerKey: trailer?.key || "",
+        trailerSite: trailer?.site || "",
+        director: pickDirector(viData.credits),
+        ...certification,
+        production_countries: pickArray(viData.production_countries, enData.production_countries),
+        spoken_languages: pickArray(viData.spoken_languages, enData.spoken_languages),
+        runtime: viData.runtime || enData.runtime || 0
+    };
+};
+
+const shouldRefreshMovieMetadata = (movie) => {
+    return !movie.titleVi
+        || !movie.overviewVi
+        || !movie.trailerUrl
+        || !movie.director
+        || !movie.imdb_id
+        || !movie.certification;
+};
+
 export const ensureMovieExists = async (movieId) => {
     let movie = await Movie.findById(movieId);
 
     if (movie) {
+        if (shouldRefreshMovieMetadata(movie)) {
+            const moviePayload = await buildMoviePayload(movieId);
+            movie.set(moviePayload);
+            await movie.save();
+        }
+
         return movie;
     }
 
-    const [movieDetailsResponse, movieCreditsResponse] = await Promise.all([
-        axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
-            headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
-        }),
-        axios.get(`https://api.themoviedb.org/3/movie/${movieId}/credits`, {
-            headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
-        })
-    ]);
-
-    const movieApiData = movieDetailsResponse.data;
-    const movieCreditsData = movieCreditsResponse.data;
-
-    movie = await Movie.create({
-        _id: movieId,
-        title: movieApiData.title,
-        overview: movieApiData.overview,
-        poster_path: movieApiData.poster_path,
-        backdrop_path: movieApiData.backdrop_path,
-        genres: movieApiData.genres,
-        casts: movieCreditsData.cast,
-        release_date: movieApiData.release_date,
-        original_language: movieApiData.original_language,
-        tagline: movieApiData.tagline || "",
-        vote_average: movieApiData.vote_average,
-        runtime: movieApiData.runtime
-    });
+    movie = await Movie.create(await buildMoviePayload(movieId));
 
     return movie;
 };

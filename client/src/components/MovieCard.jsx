@@ -13,6 +13,15 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import timeFormat from '../lib/timeFormat'
 import { useAppContext } from '../context/AppContext'
+import TrailerModal from './TrailerModal'
+import {
+  formatCertification,
+  getMovieGenres,
+  getMovieOverview,
+  getMovieTagline,
+  getMovieTitle,
+  getYoutubeEmbedUrl
+} from '../lib/movieDisplay'
 
 const PREVIEW_DELAY_MS = 1000
 const PREVIEW_WIDTH = 520
@@ -47,13 +56,20 @@ const MovieCard = ({ movie }) => {
   const hoverTimerRef = useRef(null)
   const closeTimerRef = useRef(null)
   const [preview, setPreview] = useState(null)
+  const [trailerEmbedUrl, setTrailerEmbedUrl] = useState('')
 
   const isFavorite = favoriteMovies.some((favoriteMovie) => favoriteMovie._id === movie._id)
   const hasShowtime = shows.some((showMovie) => showMovie._id === movie._id)
   const posterImage = movie.poster_path ? image_base_url + movie.poster_path : image_base_url + movie.backdrop_path
   const backdropImage = movie.backdrop_path ? image_base_url + movie.backdrop_path : posterImage
-  const genres = movie.genres?.slice(0, 3) || []
-  const rating = movie.vote_average ? movie.vote_average.toFixed(1) : '0.0'
+  const movieTitle = getMovieTitle(movie)
+  const movieTagline = getMovieTagline(movie)
+  const movieOverview = getMovieOverview(movie)
+  const genres = getMovieGenres(movie).slice(0, 3)
+  const imdbRating = movie.imdb_rating ? movie.imdb_rating.toFixed(1) : ''
+  const tmdbRating = movie.vote_average ? movie.vote_average.toFixed(1) : '0.0'
+  const displayRating = imdbRating || tmdbRating
+  const ratingLabel = imdbRating ? 'IMDb' : 'TMDB'
 
   const goToDetail = () => {
     navigate(`/movies/${movie._id}`)
@@ -70,6 +86,13 @@ const MovieCard = ({ movie }) => {
   }
 
   const handleTrailer = () => {
+    const embedUrl = getYoutubeEmbedUrl(movie)
+
+    if (embedUrl) {
+      setTrailerEmbedUrl(embedUrl)
+      return
+    }
+
     toast('Trailer của phim này sẽ được cập nhật sớm.')
   }
 
@@ -162,7 +185,7 @@ const MovieCard = ({ movie }) => {
         >
           <img
             src={posterImage}
-            alt={movie.title}
+            alt={movieTitle}
             className='h-72 w-full object-cover transition duration-500 group-hover:scale-105'
           />
           <div className='absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/85 to-transparent' />
@@ -171,7 +194,7 @@ const MovieCard = ({ movie }) => {
           </div>
           <div className='absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur'>
             <StarIcon className='h-3.5 w-3.5 fill-primary text-primary' />
-            {rating}
+            {displayRating}
           </div>
         </button>
 
@@ -181,10 +204,10 @@ const MovieCard = ({ movie }) => {
               type='button'
               onClick={goToDetail}
               className='min-w-0 text-left'
-              title={movie.title}
+              title={movieTitle}
             >
-              <p className='truncate text-base font-semibold text-white'>{movie.title}</p>
-              <p className='mt-1 truncate text-xs text-primary/90'>{movie.tagline || movie.original_title || 'Phim chiếu rạp QuickShow'}</p>
+              <p className='truncate text-base font-semibold text-white'>{movieTitle}</p>
+              <p className='mt-1 truncate text-xs text-primary/90'>{movieTagline}</p>
             </button>
 
             <button
@@ -219,7 +242,7 @@ const MovieCard = ({ movie }) => {
               type='button'
               onClick={goToDetail}
               className='inline-flex items-center justify-center rounded-full border border-white/15 px-3 py-2.5 text-sm font-medium text-gray-200 transition hover:border-primary/40 hover:text-white'
-              aria-label={`Xem chi tiết phim ${movie.title}`}
+              aria-label={`Xem chi tiết phim ${movieTitle}`}
             >
               <InfoIcon className='h-4 w-4' />
             </button>
@@ -237,7 +260,7 @@ const MovieCard = ({ movie }) => {
           <div className='relative h-72 overflow-hidden'>
             <img
               src={backdropImage}
-              alt={movie.title}
+              alt={movieTitle}
               className='h-full w-full object-cover'
             />
             <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.05),rgba(22,24,36,0.9))]' />
@@ -253,8 +276,8 @@ const MovieCard = ({ movie }) => {
               <div className='mb-3 inline-flex rounded-full border border-primary/30 bg-primary/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary'>
                 {hasShowtime ? 'Đang mở bán vé' : 'Chưa có suất chiếu'}
               </div>
-              <h3 className='text-2xl font-semibold leading-tight'>{movie.title}</h3>
-              {movie.tagline && <p className='mt-1 text-sm text-primary/90'>{movie.tagline}</p>}
+              <h3 className='text-2xl font-semibold leading-tight'>{movieTitle}</h3>
+              {movieTagline && <p className='mt-1 text-sm text-primary/90'>{movieTagline}</p>}
             </div>
           </div>
 
@@ -262,7 +285,7 @@ const MovieCard = ({ movie }) => {
             <div className='flex flex-wrap gap-2 text-xs text-gray-300'>
               <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
                 <StarIcon className='h-4 w-4 fill-primary text-primary' />
-                Điểm {rating}
+                {ratingLabel} {displayRating}
               </span>
               <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
                 <Clock3Icon className='h-4 w-4 text-primary' />
@@ -272,15 +295,20 @@ const MovieCard = ({ movie }) => {
                 <CalendarDaysIcon className='h-4 w-4 text-primary' />
                 {địnhDạngNgàyKhởiChiếu(movie.release_date)}
               </span>
+              {movie.certification && (
+                <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
+                  {formatCertification(movie)}
+                </span>
+              )}
             </div>
 
             <p className='movie-card-overview mt-4 text-sm leading-6 text-gray-300'>
-              {movie.overview || 'QuickShow đang cập nhật mô tả cho bộ phim này.'}
+              {movieOverview || 'QuickShow đang cập nhật mô tả cho bộ phim này.'}
             </p>
 
-            <div className='mt-4 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-gray-400'>
+            <div className='mt-4 flex flex-wrap gap-2 text-xs font-medium text-gray-200'>
               {genres.map((genre) => (
-                <span key={genre.id || genre.name} className='rounded-full border border-white/10 px-3 py-2'>
+                <span key={genre.id || genre.name} className='rounded-full border border-white/10 bg-white/5 px-3 py-2'>
                   {genre.name}
                 </span>
               ))}
@@ -316,6 +344,12 @@ const MovieCard = ({ movie }) => {
         </div>,
         document.body
       )}
+
+      <TrailerModal
+        embedUrl={trailerEmbedUrl}
+        title={`Trailer ${movieTitle}`}
+        onClose={() => setTrailerEmbedUrl('')}
+      />
     </>
   )
 }
