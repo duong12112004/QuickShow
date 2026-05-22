@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import BlurCircle from '../components/BlurCircle'
 import { Heart, PlayCircleIcon, StarIcon } from 'lucide-react'
 import timeFormat from '../lib/timeFormat'
@@ -13,6 +13,7 @@ import toast from 'react-hot-toast'
 const MovieDetails = () => {
 
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams()
   const [show, setShow] = useState(null)
 
@@ -54,6 +55,18 @@ const MovieDetails = () => {
   useEffect(() => {
     getShow()
   }, [id])
+
+  useEffect(() => {
+    if (!show || location.hash !== '#dateSelect') {
+      return
+    }
+
+    const scrollTimer = setTimeout(() => {
+      document.getElementById('dateSelect')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+
+    return () => clearTimeout(scrollTimer)
+  }, [show, location.hash])
 
   return show ? (
     <div className='px-6 md:px-16 lg:px-40 pt-30 md:pt-50'>

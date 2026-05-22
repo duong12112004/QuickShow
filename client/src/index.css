@@ -64,6 +64,13 @@ body{
   scrollbar-width: none;
 }
 
+.movie-card-overview {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* Ẩn mũi tên tăng giảm số của thẻ input type="number" */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
