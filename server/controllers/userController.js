@@ -1,8 +1,11 @@
 import { clerkClient } from "@clerk/express";
 import Booking from "../models/Booking.js";
 import Movie from "../models/Movie.js";
+import MovieReview from "../models/MovieReview.js";
 import { inngest } from "../inngest/index.js";
 import {
+    BOOKING_STATUS,
+    PAYMENT_STATUS,
     STATUS_ACTOR,
     canUserCancelBooking,
     cancelBookingAndHandlePayment,
@@ -11,6 +14,7 @@ import {
     reconcileLegacyBookingState,
     syncBookingPaymentWithStripe
 } from "../services/bookingService.js";
+import { getShowtimeLifecycle } from "../services/showtimeService.js";
 import { getWalletSummary } from "../services/walletService.js";
 
 const ensureAuthenticatedUser = (req) => {
@@ -49,7 +53,40 @@ export const getUserBookings = async (req, res) => {
             }
         }
 
-        res.json({ success: true, bookings });
+        const bookingIds = bookings.map((booking) => booking._id);
+        const ratingReviews = await MovieReview.find({
+            booking: { $in: bookingIds },
+            rating: { $ne: null }
+        }).select("booking rating createdAt");
+        const ratingByBookingId = new Map(ratingReviews.map((review) => [
+            review.booking.toString(),
+            {
+                rating: review.rating,
+                createdAt: review.createdAt
+            }
+        ]));
+        const serializedBookings = bookings.map((booking) => {
+            const plainBooking = booking.toObject();
+            const userRating = ratingByBookingId.get(booking._id.toString()) || null;
+            const canRateQuickShow = !userRating
+                && booking.paymentStatus === PAYMENT_STATUS.PAID
+                && booking.isPaid
+                && [
+                    BOOKING_STATUS.CONFIRMED,
+                    BOOKING_STATUS.CHECKED_IN,
+                    BOOKING_STATUS.NO_SHOW
+                ].includes(booking.bookingStatus)
+                && booking.show
+                && getShowtimeLifecycle(booking.show) === "ENDED";
+
+            return {
+                ...plainBooking,
+                quickShowRating: userRating,
+                canRateQuickShow
+            };
+        });
+
+        res.json({ success: true, bookings: serializedBookings });
     } catch (error) {
         console.error(error.message);
         res.json({ success: false, message: "Lỗi khi tải lịch sử đặt vé: " + error.message });

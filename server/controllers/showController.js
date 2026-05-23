@@ -14,6 +14,7 @@ import {
     SHOWTIME_STATUS,
     validateCreateShowtimePayload
 } from "../services/showtimeService.js";
+import { attachReviewSummaries, getMovieReviewSummary } from "../services/reviewService.js";
 
 export const getNowPlayingMovies = async (req, res) => {
     try {
@@ -96,7 +97,9 @@ export const getShows = async (req, res) => {
                 uniqueMoviesMap.set(show.movie._id.toString(), show.movie);
             });
 
-        res.json({ success: true, shows: Array.from(uniqueMoviesMap.values()) });
+        const movies = await attachReviewSummaries(Array.from(uniqueMoviesMap.values()));
+
+        res.json({ success: true, shows: movies });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: "Lỗi khi tải danh sách phim: " + error.message });
@@ -190,7 +193,16 @@ export const getShow = async (req, res) => {
                 });
             });
 
-        res.json({ success: true, movie, dateTime });
+        const summary = await getMovieReviewSummary(movieId);
+        const movieWithSummary = movie
+            ? {
+                ...movie.toObject(),
+                quickShowRating: summary.averageRating,
+                quickShowRatingCount: summary.ratingCount
+            }
+            : movie;
+
+        res.json({ success: true, movie: movieWithSummary, dateTime });
     } catch (error) {
         res.json({ success: false, message: "Lỗi khi tải chi tiết lịch chiếu: " + error.message });
     }

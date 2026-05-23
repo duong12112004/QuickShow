@@ -13,6 +13,7 @@ import {
     isAdmin,
     updateShowtime,
 } from "../controllers/adminController.js";
+import { getAdminReviews, hideReview, restoreReview } from "../controllers/reviewController.js";
 import {
     createRoom,
     deleteRoom,
@@ -38,6 +39,9 @@ adminRouter.get('/bookings', protectAdmin, getAllBookings);
 adminRouter.post('/bookings/check-in', protectAdmin, checkInBookingByCode);
 adminRouter.patch('/bookings/:bookingId/cancel', protectAdmin, cancelAdminBooking);
 adminRouter.get('/all-bookings', protectAdmin, getAllBookings);
+adminRouter.get('/reviews', protectAdmin, getAdminReviews);
+adminRouter.patch('/reviews/:reviewId/hide', protectAdmin, hideReview);
+adminRouter.patch('/reviews/:reviewId/restore', protectAdmin, restoreReview);
 adminRouter.get('/seed', protectAdmin, seedCinemaData);
 adminRouter.get('/rooms', protectAdmin, getAllRooms);
 adminRouter.get('/rooms/:roomId', protectAdmin, getRoomDetail);

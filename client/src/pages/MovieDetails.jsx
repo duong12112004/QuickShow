@@ -1,23 +1,26 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import BlurCircle from '../components/BlurCircle'
 import {
   BadgeCheckIcon,
+  EyeIcon,
   Globe2Icon,
   Heart,
   LanguagesIcon,
+  MessageSquareIcon,
   PlayCircleIcon,
+  SendIcon,
   StarIcon,
   TicketIcon,
   UserRoundIcon
 } from 'lucide-react'
-import timeFormat from '../lib/timeFormat'
-import DateSelect from '../components/DateSelect'
-import MovieCard from '../components/MovieCard'
-import Loading from '../components/Loading'
-import { useAppContext } from '../context/AppContext'
 import toast from 'react-hot-toast'
+import BlurCircle from '../components/BlurCircle'
+import DateSelect from '../components/DateSelect'
+import Loading from '../components/Loading'
+import MovieCard from '../components/MovieCard'
 import TrailerModal from '../components/TrailerModal'
+import { useAppContext } from '../context/AppContext'
+import timeFormat from '../lib/timeFormat'
 import {
   formatCertification,
   formatCountries,
@@ -29,36 +32,62 @@ import {
   getYoutubeEmbedUrl
 } from '../lib/movieDisplay'
 
-// Component hiển thị trang Chi tiết của một bộ phim
-const MovieDetails = () => {
+const MAX_COMMENT_LENGTH = 1500
 
+const MovieDetails = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams()
   const [show, setShow] = useState(null)
   const [trailerEmbedUrl, setTrailerEmbedUrl] = useState('')
+  const [comments, setComments] = useState([])
+  const [visibleSpoilers, setVisibleSpoilers] = useState(new Set())
+  const [commentForm, setCommentForm] = useState({
+    comment: '',
+    hasSpoiler: false
+  })
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
 
   const { shows, axios, getToken, user, fetchFavoriteMovies, favoriteMovies, image_base_url } = useAppContext()
 
-  const formatVoteCount = (value) => {
-    return Number(value || 0).toLocaleString('vi-VN')
+  const formatVoteCount = (value) => Number(value || 0).toLocaleString('vi-VN')
+
+  const formatCommentDate = (value) => {
+    if (!value) return ''
+
+    return new Date(value).toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
   }
 
-  // Xử lý thêm/xóa phim khỏi danh sách yêu thích
+  const fetchMovieComments = useCallback(async (movieId) => {
+    try {
+      const { data } = await axios.get(`/api/reviews/movie/${movieId}`)
+
+      if (data.success) {
+        setComments(data.reviews || [])
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }, [axios])
+
   const handleFavorite = async () => {
     try {
       if (!user) {
-        return toast.error("Vui lòng đăng nhập để thực hiện chức năng này!");
+        return toast.error('Vui lòng đăng nhập để thực hiện chức năng này!')
       }
 
       const { data } = await axios.post('/api/user/update-favorite',
         { movieId: id },
         { headers: { Authorization: `Bearer ${await getToken()}` } }
-      );
+      )
 
       if (data.success) {
-        await fetchFavoriteMovies();
-        toast.success(data.message); // Lấy message tiếng Việt trực tiếp từ Backend trả về
+        await fetchFavoriteMovies()
+        toast.success(data.message)
       }
     } catch (error) {
       console.log(error)
@@ -75,7 +104,53 @@ const MovieDetails = () => {
 
     toast('Trailer của phim này sẽ được cập nhật sớm.')
   }
-  
+
+  const handleSubmitComment = async (event) => {
+    event.preventDefault()
+
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để bình luận.')
+      return
+    }
+
+    if (!commentForm.comment.trim()) {
+      toast.error('Vui lòng nhập bình luận.')
+      return
+    }
+
+    try {
+      setIsSubmittingComment(true)
+      const { data } = await axios.post('/api/reviews', {
+        movieId: id,
+        comment: commentForm.comment,
+        hasSpoiler: commentForm.hasSpoiler
+      }, {
+        headers: { Authorization: `Bearer ${await getToken()}` }
+      })
+
+      if (data.success) {
+        toast.success(data.message)
+        setCommentForm({ comment: '', hasSpoiler: false })
+        await fetchMovieComments(id)
+      } else {
+        toast.error(data.message)
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error('Không thể gửi bình luận lúc này.')
+    } finally {
+      setIsSubmittingComment(false)
+    }
+  }
+
+  const revealSpoiler = (commentId) => {
+    setVisibleSpoilers((current) => {
+      const next = new Set(current)
+      next.add(commentId)
+      return next
+    })
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -96,6 +171,10 @@ const MovieDetails = () => {
       isMounted = false
     }
   }, [axios, id])
+
+  useEffect(() => {
+    fetchMovieComments(id)
+  }, [fetchMovieComments, id])
 
   useEffect(() => {
     if (!show || location.hash !== '#dateSelect') {
@@ -120,41 +199,40 @@ const MovieDetails = () => {
   const movieGenres = getMovieGenres(movie)
   const imdbRating = movie.imdb_rating ? movie.imdb_rating.toFixed(1) : ''
   const tmdbRating = movie.vote_average ? movie.vote_average.toFixed(1) : '0.0'
+  const externalRatingLabel = imdbRating ? 'IMDb' : 'TMDB'
+  const externalRating = imdbRating || tmdbRating
+  const externalVoteLabel = imdbRating
+    ? movie.imdb_votes ? ` (${movie.imdb_votes} lượt)` : ''
+    : ` (${formatVoteCount(movie.vote_count)} lượt)`
   const countries = formatCountries(movie.production_countries)
   const languages = formatLanguages(movie.spoken_languages)
   const certification = formatCertification(movie)
 
   return (
-    <div className='px-6 md:px-16 lg:px-40 pt-30 md:pt-50'>
-      <div className='flex flex-col md:flex-row gap-8 max-w-6xl mx-auto'>
-        <img src={image_base_url + movie.poster_path} alt={movieTitle} className='max-md:mx-auto rounded-xl h-104 max-w-70 object-cover' />
-        
+    <div className='px-6 pt-30 md:px-16 md:pt-50 lg:px-40'>
+      <div className='mx-auto flex max-w-6xl flex-col gap-8 md:flex-row'>
+        <img src={image_base_url + movie.poster_path} alt={movieTitle} className='h-104 max-w-70 rounded-xl object-cover max-md:mx-auto' />
+
         <div className='relative flex flex-col gap-3'>
           <BlurCircle top='-100px' left='-100px' />
-          
-          <h1 className='text-4xl font-semibold max-w-96 text-balance'>{movieTitle}</h1>
+
+          <h1 className='max-w-96 text-balance text-4xl font-semibold'>{movieTitle}</h1>
           {originalTitle && (
             <p className='text-lg font-medium text-primary/90'>{originalTitle}</p>
           )}
-          
+
           <div className='flex flex-wrap items-center gap-2 text-sm text-gray-300'>
-            {imdbRating && (
-              <span className='inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
-                <StarIcon className='w-4 h-4 text-primary fill-primary' />
-                IMDb {imdbRating}{movie.imdb_votes ? ` (${movie.imdb_votes} lượt)` : ''}
-              </span>
-            )}
             <span className='inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
-              <StarIcon className='w-4 h-4 text-primary fill-primary' />
-              TMDB {tmdbRating} ({formatVoteCount(movie.vote_count)} lượt)
+              <StarIcon className='h-4 w-4 fill-primary text-primary' />
+              {externalRatingLabel} {externalRating}{externalVoteLabel}
             </span>
           </div>
-          
-          <p className='text-gray-400 mt-2 text-sm leading-tight max-w-xl'>
+
+          <p className='mt-2 max-w-xl text-sm leading-tight text-gray-400'>
             {movieOverview}
           </p>
           <p>
-            {timeFormat(movie.runtime)} • {movieGenres.map(genre => genre.name).join(", ")} • {movie.release_date.split("-")[0]}
+            {timeFormat(movie.runtime)} • {movieGenres.map((genre) => genre.name).join(', ')} • {movie.release_date.split('-')[0]}
           </p>
 
           <div className='grid max-w-2xl grid-cols-1 gap-3 pt-2 text-sm text-gray-300 sm:grid-cols-2'>
@@ -163,8 +241,8 @@ const MovieDetails = () => {
               Đạo diễn: {movie.director || 'Chưa cập nhật'}
             </div>
             <div className='inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3'>
-              <BadgeCheckIcon className='h-4 w-4 text-primary' />
               Phân loại: {certification}
+              <BadgeCheckIcon className='h-4 w-4 text-primary' />
             </div>
             <div className='inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3'>
               <Globe2Icon className='h-4 w-4 text-primary' />
@@ -175,46 +253,162 @@ const MovieDetails = () => {
               Ngôn ngữ phim: {languages}
             </div>
           </div>
-          
-          <div className='flex items-center flex-wrap gap-4 mt-4'>
-            <button onClick={handleTrailer} className='flex items-center gap-2 px-7 py-3 text-sm bg-gray-800 hover:bg-gray-900 transition rounded-md font-medium cursor-pointer active:scale-95'>
-              <PlayCircleIcon className='w-5 h-5' />
+
+          <div className='mt-4 flex flex-wrap items-center gap-4'>
+            <button onClick={handleTrailer} className='flex cursor-pointer items-center gap-2 rounded-md bg-gray-800 px-7 py-3 text-sm font-medium transition hover:bg-gray-900 active:scale-95'>
+              <PlayCircleIcon className='h-5 w-5' />
               Xem Trailer
             </button>
-            <a href="#dateSelect" className='inline-flex items-center gap-2 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-md font-medium cursor-pointer active:scale-95'>
-              <TicketIcon className='w-5 h-5' />
+            <a href='#dateSelect' className='inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-10 py-3 text-sm font-medium transition hover:bg-primary-dull active:scale-95'>
+              <TicketIcon className='h-5 w-5' />
               Đặt vé ngay
             </a>
-            <button onClick={handleFavorite} className='bg-gray-700 p-2.5 rounded-full transition cursor-pointer active:scale-95 hover:bg-gray-600'>
-              <Heart className={`w-5 h-5 ${favoriteMovies.find(movie => movie._id === id) ? 'fill-primary text-primary' : ''}`} />
+            <button onClick={handleFavorite} className='cursor-pointer rounded-full bg-gray-700 p-2.5 transition hover:bg-gray-600 active:scale-95'>
+              <Heart className={`h-5 w-5 ${favoriteMovies.find((movie) => movie._id === id) ? 'fill-primary text-primary' : ''}`} />
             </button>
           </div>
         </div>
       </div>
-      
-      <p className='text-lg font-medium mt-20'>Diễn viên nổi bật</p>
-      <div className='overflow-x-auto no-scrollbar mt-8 pb-4'>
-        <div className='flex items-center gap-4 w-max px-4'>
-          {show.movie.casts.slice(0, 12).map((cast, index) => (
-            <div key={index} className='flex flex-col items-center text-center'>
-              <img src={cast.profile_path ? image_base_url + cast.profile_path : image_base_url + movie.poster_path} alt={cast.name} className='rounded-full h-20 md:h-20 aspect-square object-cover' />
-              <p className='font-medium text-xs mt-3'>{cast.name}</p>
+
+      <div className='mt-16 grid gap-8 lg:grid-cols-[minmax(0,0.3fr)_minmax(0,0.7fr)]'>
+        <section>
+          <p className='text-lg font-medium'>Diễn viên nổi bật</p>
+          <div className='no-scrollbar mt-6 overflow-x-auto pb-4 lg:overflow-visible'>
+            <div className='flex w-max items-center gap-4 px-1 lg:w-full lg:flex-wrap'>
+              {show.movie.casts.slice(0, 12).map((cast, index) => (
+                <div key={index} className='w-20 shrink-0 text-center'>
+                  <img src={cast.profile_path ? image_base_url + cast.profile_path : image_base_url + movie.poster_path} alt={cast.name} className='aspect-square h-16 rounded-full object-cover md:h-20' />
+                  <p className='mt-3 text-xs font-medium'>{cast.name}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
+
+        <section className='rounded-[1.5rem] border border-transparent bg-transparent p-0 md:p-0'>
+          <div className='flex items-center gap-3'>
+            <MessageSquareIcon className='h-6 w-6 text-white' />
+            <h2 className='text-2xl font-semibold text-white'>Bình luận ({comments.length})</h2>
+          </div>
+
+          <form onSubmit={handleSubmitComment} className='mt-8'>
+            <div className='mb-5 flex items-center gap-3'>
+              {user?.imageUrl ? (
+                <img src={user.imageUrl} alt={user.fullName || 'User'} className='h-11 w-11 rounded-full object-cover' />
+              ) : (
+                <div className='flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary'>
+                  {user?.firstName?.charAt(0) || 'Q'}
+                </div>
+              )}
+              <div>
+                <p className='text-xs text-gray-500'>Bình luận với tên</p>
+                <p className='text-sm font-semibold text-white'>{user?.fullName || user?.firstName || 'Khách'}</p>
+              </div>
+            </div>
+
+            <div className='overflow-hidden rounded-xl border border-white/8 bg-[#272a34] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]'>
+              <div className='relative'>
+                <textarea
+                  value={commentForm.comment}
+                  onChange={(event) => setCommentForm((current) => ({ ...current, comment: event.target.value }))}
+                  placeholder={user ? 'Viết bình luận...' : 'Đăng nhập để viết bình luận...'}
+                  rows={4}
+                  maxLength={MAX_COMMENT_LENGTH}
+                  disabled={!user}
+                  className='min-h-24 w-full resize-none rounded-lg bg-[#0a0a11] px-4 py-4 pr-20 text-sm text-white outline-none placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-70'
+                />
+                <span className='absolute right-4 top-3 text-xs text-gray-400'>
+                  {commentForm.comment.length} / {MAX_COMMENT_LENGTH}
+                </span>
+              </div>
+
+              <div className='flex items-center justify-between px-1 py-3'>
+                <label className='inline-flex items-center gap-2 text-sm text-white'>
+                  <input
+                    type='checkbox'
+                    checked={commentForm.hasSpoiler}
+                    onChange={(event) => setCommentForm((current) => ({ ...current, hasSpoiler: event.target.checked }))}
+                    disabled={!user}
+                    className='h-4 w-4 accent-primary'
+                  />
+                  Tiết lộ
+                </label>
+
+                <button
+                  type='submit'
+                  disabled={!user || isSubmittingComment}
+                  className='inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  {isSubmittingComment ? 'Đang gửi...' : 'Gửi'}
+                  <SendIcon className='h-5 w-5 fill-yellow-300 text-yellow-300' />
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <div className='mt-10 space-y-6'>
+            {comments.length === 0 ? (
+              <div className='rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-gray-400'>
+                Chưa có bình luận nào cho phim này.
+              </div>
+            ) : comments.map((comment) => {
+              const isSpoilerHidden = comment.hasSpoiler && !visibleSpoilers.has(comment._id)
+
+              return (
+                <article key={comment._id} className='flex gap-3'>
+                  {comment.userImage ? (
+                    <img src={comment.userImage} alt={comment.userName} className='h-11 w-11 rounded-full object-cover' />
+                  ) : (
+                    <div className='flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary'>
+                      {comment.userName?.charAt(0) || 'Q'}
+                    </div>
+                  )}
+
+                  <div className='min-w-0 flex-1'>
+                    <div className='flex flex-wrap items-center gap-3'>
+                      <p className='font-semibold text-white'>{comment.userName}</p>
+                      <span className='text-xs text-gray-500'>{formatCommentDate(comment.createdAt)}</span>
+                      {comment.hasSpoiler && (
+                        <span className='rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-xs text-amber-200'>
+                          Spoiler
+                        </span>
+                      )}
+                    </div>
+
+                    <div className='relative mt-2'>
+                      <p className={`whitespace-pre-line text-sm leading-6 text-gray-300 transition ${isSpoilerHidden ? 'select-none blur-sm' : ''}`}>
+                        {comment.comment}
+                      </p>
+                      {isSpoilerHidden && (
+                        <button
+                          type='button'
+                          onClick={() => revealSpoiler(comment._id)}
+                          className='absolute inset-0 m-auto flex h-9 w-fit items-center gap-2 rounded-full border border-white/15 bg-black/80 px-4 text-sm font-medium text-white backdrop-blur transition hover:border-primary/40'
+                        >
+                          <EyeIcon className='h-4 w-4 text-primary' />
+                          Xem bình luận
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </section>
       </div>
 
       <DateSelect dateTime={show.dateTime} id={id} />
 
-      <p className='text-lg font-medium mt-20 mb-8'>Có thể bạn sẽ thích</p>
-      <div className='flex flex-wrap max-sm:justify-center gap-8'>
+      <p className='mb-8 mt-20 text-lg font-medium'>Có thể bạn sẽ thích</p>
+      <div className='flex flex-wrap gap-8 max-sm:justify-center'>
         {shows.slice(0, 4).map((movie, index) => (
           <MovieCard key={index} movie={movie} />
         ))}
       </div>
-      
-      <div className='flex justify-center mt-20'>
-        <button onClick={() => { navigate('/movies'); scrollTo(0, 0) }} className='px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-md font-medium cursor-pointer'>
+
+      <div className='mt-20 flex justify-center'>
+        <button onClick={() => { navigate('/movies'); scrollTo(0, 0) }} className='cursor-pointer rounded-md bg-primary px-10 py-3 text-sm font-medium transition hover:bg-primary-dull'>
           Xem thêm
         </button>
       </div>

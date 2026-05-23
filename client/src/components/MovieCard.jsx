@@ -68,8 +68,11 @@ const MovieCard = ({ movie }) => {
   const genres = getMovieGenres(movie).slice(0, 3)
   const imdbRating = movie.imdb_rating ? movie.imdb_rating.toFixed(1) : ''
   const tmdbRating = movie.vote_average ? movie.vote_average.toFixed(1) : '0.0'
-  const displayRating = imdbRating || tmdbRating
-  const ratingLabel = imdbRating ? 'IMDb' : 'TMDB'
+  const externalDisplayRating = imdbRating || tmdbRating
+  const externalRatingLabel = imdbRating ? 'IMDb' : 'TMDB'
+  const quickShowRating = movie.quickShowRating ? Number(movie.quickShowRating).toFixed(1) : ''
+  const cardDisplayRating = quickShowRating || tmdbRating
+  const cardRatingLabel = quickShowRating ? 'QuickShow' : 'TMDB'
 
   const goToDetail = () => {
     navigate(`/movies/${movie._id}`)
@@ -194,7 +197,7 @@ const MovieCard = ({ movie }) => {
           </div>
           <div className='absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur'>
             <StarIcon className='h-3.5 w-3.5 fill-primary text-primary' />
-            {displayRating}
+            <span title={`${cardRatingLabel} ${cardDisplayRating}`}>{cardDisplayRating}</span>
           </div>
         </button>
 
@@ -285,7 +288,7 @@ const MovieCard = ({ movie }) => {
             <div className='flex flex-wrap gap-2 text-xs text-gray-300'>
               <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
                 <StarIcon className='h-4 w-4 fill-primary text-primary' />
-                {ratingLabel} {displayRating}
+                {externalRatingLabel} {externalDisplayRating}
               </span>
               <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
                 <Clock3Icon className='h-4 w-4 text-primary' />

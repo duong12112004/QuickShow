@@ -160,7 +160,7 @@ const Navbar = () => {
         onChange={handleSearchChange}
         onFocus={activateSearch}
         placeholder='Tìm phim hoặc đạo diễn...'
-        className='min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-500'
+        className='min-w-0 flex-1 bg-transparent text-sm font-medium text-white outline-none placeholder:font-semibold placeholder:text-gray-300'
       />
       {searchValue && !mobile && (
         <button
@@ -194,7 +194,7 @@ const Navbar = () => {
         <img src={assets.logo} alt='QuickShow' className='w-36 h-auto' />
       </Link>
 
-      <div className={`max-md:absolute max-md:top-0 max-md:left-0 max-md:font-medium max-md:text-lg z-50 flex flex-col md:flex-row items-center max-md:justify-center gap-8 md:px-8 py-3 max-md:h-screen md:rounded-full backdrop-blur bg-black/70 md:bg-white/10 md:border border-gray-300/20 overflow-hidden transition-[width] duration-300 ${isOpen ? 'max-md:w-full' : 'max-md:w-0'}`}>
+      <div className={`max-md:absolute max-md:top-0 max-md:left-0 max-md:font-medium max-md:text-lg z-50 flex flex-col md:flex-row items-center max-md:justify-center gap-8 md:absolute md:left-1/2 md:-translate-x-1/2 md:px-8 py-3 max-md:h-screen md:rounded-full backdrop-blur bg-black/70 md:bg-white/10 md:border border-gray-300/20 overflow-hidden transition-[width] duration-300 ${isOpen ? 'max-md:w-full' : 'max-md:w-0'}`}>
         <XIcon className='md:hidden absolute top-6 right-6 w-6 h-6 cursor-pointer' onClick={() => setIsOpen(!isOpen)} />
 
         <Link onClick={handleLinkClick} to='/'>Trang chủ</Link>
@@ -215,8 +215,8 @@ const Navbar = () => {
       </div>
 
       <div className='flex items-center gap-8'>
-        <div ref={desktopSearchRef} className='relative max-md:hidden'>
-          <div className='h-11 w-72 overflow-hidden rounded-full border border-white/10 bg-white/8 backdrop-blur transition focus-within:border-primary/40'>
+        <div ref={desktopSearchRef} className='absolute right-[220px] top-1/2 hidden -translate-y-1/2 md:block lg:right-[320px] xl:right-[360px]'>
+          <div className='h-11 w-64 overflow-hidden rounded-full border border-white/10 bg-white/8 backdrop-blur transition focus-within:border-primary/40 lg:w-72'>
             {renderSearchForm(false)}
           </div>
 

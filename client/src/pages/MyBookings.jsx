@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import { StarIcon } from 'lucide-react';
 import Loading from '../components/Loading';
 import BlurCircle from '../components/BlurCircle';
 import timeFormat from '../lib/timeFormat';
@@ -8,12 +9,13 @@ import { useAppContext } from '../context/AppContext';
 import { getBookingStatusUi, getPaymentStatusUi } from '../lib/bookingStatus';
 
 const MyBookings = () => {
-  const { axios, getToken, user, image_base_url, wallet, fetchWallet } = useAppContext();
+  const { axios, getToken, user, image_base_url, wallet, fetchWallet, fetchShows } = useAppContext();
   const currency = import.meta.env.VITE_CURRENCY;
 
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState('');
+  const [ratingDrafts, setRatingDrafts] = useState({});
 
   const getMyBookings = async () => {
     try {
@@ -54,6 +56,42 @@ const MyBookings = () => {
     } catch (error) {
       console.error(error);
       toast.error('Không thể hủy booking lúc này.');
+    } finally {
+      setProcessingId('');
+    }
+  };
+
+  const handleRateBooking = async (bookingId) => {
+    const rating = Number(ratingDrafts[bookingId] || 0);
+
+    if (!rating) {
+      toast.error('Vui lòng chọn điểm từ 1 đến 10.');
+      return;
+    }
+
+    try {
+      setProcessingId(bookingId);
+      const { data } = await axios.post('/api/reviews/rating', {
+        bookingId,
+        rating
+      }, {
+        headers: { Authorization: `Bearer ${await getToken()}` }
+      });
+
+      if (data.success) {
+        toast.success(data.message);
+        setRatingDrafts((current) => {
+          const next = { ...current };
+          delete next[bookingId];
+          return next;
+        });
+        await Promise.all([getMyBookings(), fetchShows()]);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Không thể gửi điểm đánh giá lúc này.');
     } finally {
       setProcessingId('');
     }
@@ -221,7 +259,42 @@ const MyBookings = () => {
                       </button>
                     )}
 
-                    {!canPay && !canCancel && (
+                    {item.quickShowRating && (
+                      <div className='rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary'>
+                        <div className='flex items-center gap-2 font-medium'>
+                          <StarIcon className='h-4 w-4 fill-primary' />
+                          Bạn đã đánh giá {item.quickShowRating.rating}/10
+                        </div>
+                      </div>
+                    )}
+
+                    {item.canRateQuickShow && (
+                      <div className='rounded-xl border border-white/10 bg-white/5 p-3'>
+                        <p className='mb-2 text-sm font-medium text-white'>Đánh giá phim</p>
+                        <div className='flex gap-2'>
+                          <select
+                            value={ratingDrafts[item._id] || ''}
+                            onChange={(event) => setRatingDrafts((current) => ({ ...current, [item._id]: event.target.value }))}
+                            className='h-10 min-w-0 flex-1 rounded-full border border-white/10 bg-[#111827] px-3 text-sm text-white outline-none focus:border-primary/50'
+                          >
+                            <option value=''>Chọn điểm</option>
+                            {Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => (
+                              <option key={rating} value={rating}>{rating}/10</option>
+                            ))}
+                          </select>
+                          <button
+                            type='button'
+                            onClick={() => handleRateBooking(item._id)}
+                            disabled={processingId === item._id}
+                            className='rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-dull disabled:cursor-not-allowed disabled:opacity-60'
+                          >
+                            Gửi
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {!canPay && !canCancel && !item.canRateQuickShow && !item.quickShowRating && (
                       <div className='rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300'>
                         Booking này hiện không có thao tác thêm.
                       </div>

@@ -15,6 +15,7 @@ import DashBoard from './pages/admin/DashBoard'
 import ListBookings from './pages/admin/ListBookings'
 import ManageRooms from './pages/admin/ManageRooms'
 import ManageShowtimes from './pages/admin/ManageShowtimes'
+import ManageReviews from './pages/admin/ManageReviews'
 
 import { SignIn } from '@clerk/clerk-react'
 import { useAppContext } from './context/AppContext'
@@ -48,6 +49,7 @@ const App = () => {
           <Route path='add-shows' element={<ManageShowtimes />} />
           <Route path='list-shows' element={<ManageShowtimes />} />
           <Route path='list-bookings' element={<ListBookings />} />
+          <Route path='reviews' element={<ManageReviews />} />
         </Route>
       </Routes>
       {!isAdminRoute && <Footer />}
