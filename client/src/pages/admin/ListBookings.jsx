@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Ban,
-  ChevronLeft,
-  ChevronRight,
   ClipboardCopy,
   Download,
   FilterX,
@@ -10,6 +8,7 @@ import {
   TicketCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import AdminPagination from '../../components/admin/AdminPagination';
 import Title from '../../components/admin/Title';
 import { dateFormat } from '../../lib/dateFormat';
 import { useAppContext } from '../../context/AppContext';
@@ -459,29 +458,12 @@ const ListBookings = () => {
         )}
       </div>
 
-      <div className='flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300 md:flex-row md:items-center md:justify-between'>
-        <p>Trang {currentPage}/{totalPages}</p>
-        <div className='flex items-center gap-2'>
-          <button
-            type='button'
-            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50'
-          >
-            <ChevronLeft className='h-4 w-4' />
-            Trước
-          </button>
-          <button
-            type='button'
-            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages || bookings.length === 0}
-            className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50'
-          >
-            Sau
-            <ChevronRight className='h-4 w-4' />
-          </button>
-        </div>
-      </div>
+      <AdminPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        disabled={bookings.length === 0}
+      />
     </div>
   );
 };

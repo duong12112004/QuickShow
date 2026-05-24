@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   CalendarPlus,
-  ChevronLeft,
-  ChevronRight,
   CirclePause,
   PenSquare,
   PlusCircle,
@@ -14,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import AdminPagination from '../../components/admin/AdminPagination'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
 import { dateFormat, formatToDateTimeLocal, getCurrentDateTimeLocal } from '../../lib/dateFormat'
@@ -566,7 +565,7 @@ const ManageShowtimes = () => {
               const posterPath = showtime.movie?.poster_path
 
               return (
-                <tr key={showtime._id} className='border-b border-primary/15 align-top even:bg-white/[0.02] last:border-0'>
+                <tr key={showtime._id} className='border-b border-primary/15 align-top even:bg-white/2 last:border-0'>
                   <td className='p-3 pl-5'>
                     <div className='flex gap-3'>
                       {posterPath ? (
@@ -662,29 +661,12 @@ const ManageShowtimes = () => {
         )}
       </div>
 
-      <div className='flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300 md:flex-row md:items-center md:justify-between'>
-        <p>Trang {currentPage}/{totalPages}</p>
-        <div className='flex items-center gap-2'>
-          <button
-            type='button'
-            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50'
-          >
-            <ChevronLeft className='h-4 w-4' />
-            Trước
-          </button>
-          <button
-            type='button'
-            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages || filteredShowtimes.length === 0}
-            className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50'
-          >
-            Sau
-            <ChevronRight className='h-4 w-4' />
-          </button>
-        </div>
-      </div>
+      <AdminPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        disabled={filteredShowtimes.length === 0}
+      />
 
       {createModalOpen && (
         <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6'>

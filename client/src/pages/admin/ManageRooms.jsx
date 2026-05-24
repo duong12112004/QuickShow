@@ -1,21 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   CirclePause,
+  FilterX,
   PenSquare,
   PlusCircle,
   Save,
+  Search,
   Trash2,
   Wrench,
   XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import AdminPagination from '../../components/admin/AdminPagination'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
 
 const PAGE_SIZE = 8
+
+const roomTypeOptions = ['2D', '3D', 'IMAX', 'GOLD_CLASS', 'SWEETBOX']
+
+const darkInputClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-primary'
+const darkSelectClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-primary'
+const darkOptionClassName = 'bg-slate-950 text-white'
 
 const defaultForm = {
   name: '',
@@ -166,6 +173,10 @@ const ManageRooms = () => {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [searchValue, setSearchValue] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [roomTypeFilter, setRoomTypeFilter] = useState('ALL')
+  const [formModalOpen, setFormModalOpen] = useState(false)
 
   const fetchRooms = async () => {
     try {
@@ -205,6 +216,7 @@ const ManageRooms = () => {
         status: room.status || 'ACTIVE',
         maintenanceNote: room.maintenanceNote || '',
       })
+      setFormModalOpen(true)
     } catch {
       toast.error('Không tải được chi tiết phòng chiếu.')
     }
@@ -216,16 +228,55 @@ const ManageRooms = () => {
     }
   }, [user])
 
+  const stats = useMemo(() => ({
+    total: rooms.length,
+    active: rooms.filter((room) => room.status === 'ACTIVE').length,
+    maintenance: rooms.filter((room) => room.status === 'MAINTENANCE').length,
+    inactive: rooms.filter((room) => room.status === 'INACTIVE').length,
+    totalCapacity: rooms.reduce((sum, room) => sum + Number(room.capacity || 0), 0),
+    futureShows: rooms.reduce((sum, room) => sum + Number(room.futureShowsCount || 0), 0),
+  }), [rooms])
+
+  const filteredRooms = useMemo(() => {
+    const search = searchValue.trim().toLowerCase()
+
+    return rooms.filter((room) => {
+      const nameMatches = `${room.name || ''}`.toLowerCase().includes(search)
+      const typeMatches = roomTypeFilter === 'ALL' || room.roomType === roomTypeFilter
+      const statusMatches = statusFilter === 'ALL' || room.status === statusFilter
+
+      return (!search || nameMatches) && typeMatches && statusMatches
+    })
+  }, [rooms, roomTypeFilter, searchValue, statusFilter])
+
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(rooms.length / PAGE_SIZE))
+    setCurrentPage(1)
+  }, [searchValue, statusFilter, roomTypeFilter])
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredRooms.length / PAGE_SIZE))
     if (currentPage > totalPages) {
       setCurrentPage(totalPages)
     }
-  }, [rooms.length, currentPage])
+  }, [filteredRooms.length, currentPage])
 
   const resetForm = () => {
     setSelectedRoom(null)
     setFormData(defaultForm)
+    setFormModalOpen(false)
+  }
+
+  const openCreateForm = () => {
+    setSelectedRoom(null)
+    setFormData(defaultForm)
+    setFormModalOpen(true)
+  }
+
+  const resetFilters = () => {
+    setSearchValue('')
+    setStatusFilter('ALL')
+    setRoomTypeFilter('ALL')
+    setCurrentPage(1)
   }
 
   const previewStats = useMemo(() => {
@@ -242,13 +293,13 @@ const ManageRooms = () => {
     }
   }, [formData.roomType, selectedRoom])
 
-  const totalPages = Math.max(1, Math.ceil(rooms.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filteredRooms.length / PAGE_SIZE))
   const paginatedRooms = useMemo(() => {
     const startIndex = (currentPage - 1) * PAGE_SIZE
-    return rooms.slice(startIndex, startIndex + PAGE_SIZE)
-  }, [rooms, currentPage])
-  const startRow = rooms.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
-  const endRow = Math.min(currentPage * PAGE_SIZE, rooms.length)
+    return filteredRooms.slice(startIndex, startIndex + PAGE_SIZE)
+  }, [filteredRooms, currentPage])
+  const startRow = filteredRooms.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const endRow = Math.min(currentPage * PAGE_SIZE, filteredRooms.length)
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -374,172 +425,231 @@ const ManageRooms = () => {
     <div className='space-y-8'>
       <Title text1='Quản lý' text2='Phòng chiếu' />
 
-      <div className='grid gap-6 xl:grid-cols-[1.2fr_0.8fr]'>
-        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-5'>
-          <div className='flex items-center justify-between gap-4'>
-            <div>
-              <h2 className='text-lg font-medium'>Danh sách phòng</h2>
-              <p className='text-sm text-gray-400'>Theo dõi trạng thái, sức chứa và thao tác nhanh trên từng phòng.</p>
-            </div>
+      <div className='grid gap-4 md:grid-cols-3 xl:grid-cols-6'>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Tổng phòng</p>
+          <p className='mt-2 text-2xl font-semibold text-white'>{stats.total}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Đang hoạt động</p>
+          <p className='mt-2 text-2xl font-semibold text-emerald-300'>{stats.active}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Bảo trì</p>
+          <p className='mt-2 text-2xl font-semibold text-amber-300'>{stats.maintenance}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Ngừng dùng</p>
+          <p className='mt-2 text-2xl font-semibold text-gray-300'>{stats.inactive}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Tổng sức chứa</p>
+          <p className='mt-2 text-2xl font-semibold text-primary'>{stats.totalCapacity}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Suất sắp tới</p>
+          <p className='mt-2 text-2xl font-semibold text-sky-300'>{stats.futureShows}</p>
+        </div>
+      </div>
+
+      <div className='rounded-2xl border border-primary/20 bg-primary/8 p-5'>
+        <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
+          <div>
+            <h2 className='text-lg font-medium'>Bộ lọc phòng chiếu</h2>
+            <p className='text-sm text-gray-400'>Tìm phòng theo tên, loại phòng và trạng thái vận hành.</p>
+          </div>
+
+          <div className='flex flex-wrap gap-2'>
             <button
-              onClick={resetForm}
+              type='button'
+              onClick={resetFilters}
+              className='inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/5'
+            >
+              <FilterX className='h-4 w-4' />
+              Đặt lại
+            </button>
+            <button
+              type='button'
+              onClick={openCreateForm}
               className='inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20'
             >
               <PlusCircle className='h-4 w-4' />
               Tạo phòng mới
             </button>
           </div>
+        </div>
 
-          <div className='mt-5 overflow-x-auto rounded-2xl border border-primary/20 bg-transparent'>
-            <table className='min-w-full text-sm'>
-              <thead className='text-left text-white'>
-                <tr className='border-b border-primary/20 bg-primary/12'>
-                  <th className='px-3 py-3 font-medium'>Phòng</th>
-                  <th className='px-3 py-3 font-medium'>Loại</th>
-                  <th className='px-3 py-3 font-medium'>Trạng thái</th>
-                  <th className='px-3 py-3 font-medium'>Sức chứa</th>
-                  <th className='px-3 py-3 font-medium'>Suất tới</th>
-                  <th className='px-3 py-3 font-medium text-right'>Tác vụ</th>
+        <div className='mt-5 grid gap-3 md:grid-cols-3'>
+          <label className='relative block'>
+            <Search className='pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500' />
+            <input
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              placeholder='Tìm theo tên phòng'
+              className={`${darkInputClassName} pl-11`}
+            />
+          </label>
+
+          <select
+            value={roomTypeFilter}
+            onChange={(event) => setRoomTypeFilter(event.target.value)}
+            className={darkSelectClassName}
+          >
+            <option value='ALL' className={darkOptionClassName}>Tất cả loại phòng</option>
+            {roomTypeOptions.map((roomType) => (
+              <option key={roomType} value={roomType} className={darkOptionClassName}>{roomType}</option>
+            ))}
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className={darkSelectClassName}
+          >
+            <option value='ALL' className={darkOptionClassName}>Tất cả trạng thái</option>
+            <option value='ACTIVE' className={darkOptionClassName}>ACTIVE</option>
+            <option value='MAINTENANCE' className={darkOptionClassName}>MAINTENANCE</option>
+            <option value='INACTIVE' className={darkOptionClassName}>INACTIVE</option>
+          </select>
+        </div>
+
+        <div className='mt-4 flex items-center justify-between text-xs text-gray-400'>
+          <p>
+            {loading
+              ? 'Đang tải dữ liệu phòng chiếu...'
+              : filteredRooms.length > 0
+                ? `Đang hiển thị ${startRow}-${endRow} trên tổng ${filteredRooms.length} phòng`
+                : 'Không có phòng phù hợp'}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <div className='overflow-x-auto rounded-2xl border border-primary/20 bg-primary/8'>
+          <table className='min-w-full text-sm'>
+            <thead className='text-left text-white'>
+              <tr className='border-b border-primary/20 bg-primary/12'>
+                <th className='px-3 py-3 font-medium'>Phòng</th>
+                <th className='px-3 py-3 font-medium'>Loại</th>
+                <th className='px-3 py-3 font-medium'>Trạng thái</th>
+                <th className='px-3 py-3 font-medium'>Sức chứa</th>
+                <th className='px-3 py-3 font-medium'>Suất tới</th>
+                <th className='px-3 py-3 font-medium text-right'>Tác vụ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className='px-3 py-8 text-center text-sm text-gray-400'>Đang tải dữ liệu phòng chiếu...</td>
                 </tr>
-              </thead>
-              <tbody>
-                {paginatedRooms.map((room) => (
-                  <tr key={room._id} className='border-b border-primary/15 align-top even:bg-white/2'>
-                    <td className='px-3 py-4'>
-                      <p className='font-medium text-white'>{room.name}</p>
-                      <p className='text-xs text-gray-500'>
-                        {room.totalShowsCount > 0 ? `Đã từng có ${room.totalShowsCount} suất chiếu` : 'Chưa phát sinh suất chiếu'}
-                      </p>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>{room.roomType}</td>
-                    <td className='px-3 py-4'>
-                      <span className={`rounded-full px-2.5 py-1 text-xs ${
-                        room.status === 'ACTIVE'
-                          ? 'bg-emerald-500/15 text-emerald-300'
-                          : room.status === 'MAINTENANCE'
-                            ? 'bg-amber-500/15 text-amber-300'
-                            : 'bg-gray-500/15 text-gray-300'
-                      }`}>
-                        {statusLabel[room.status] || room.status}
-                      </span>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>{room.capacity} ghế</td>
-                    <td className='px-3 py-4 text-gray-300'>
-                      {room.futureShowsCount > 0 ? `${room.futureShowsCount} suất` : 'Không có'}
-                    </td>
-                    <td className='px-3 py-4'>
-                      <div className='flex flex-wrap justify-end gap-2'>
-                        
-                        {room.status !== 'MAINTENANCE' && (
-                          <button
-                            onClick={() => handleQuickStatusUpdate(room, 'MAINTENANCE')}
-                            className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10'
-                          >
-                            <Wrench className='h-3.5 w-3.5' />
-                            Bảo trì
-                          </button>
-                        )}
-                        {room.status !== 'INACTIVE' && (
-                          <button
-                            onClick={() => handleQuickStatusUpdate(room, 'INACTIVE')}
-                            className='inline-flex items-center gap-1.5 rounded-lg border border-slate-500/30 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-500/10'
-                          >
-                            <CirclePause className='h-3.5 w-3.5' />
-                            Ngừng
-                          </button>
-                        )}
-                        {room.status !== 'ACTIVE' && (
-                          <button
-                            onClick={() => handleQuickStatusUpdate(room, 'ACTIVE')}
-                            className='inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10'
-                          >
-                            <CheckCircle2 className='h-3.5 w-3.5' />
-                            Mở lại
-                          </button>
-                        )}
+              ) : paginatedRooms.map((room) => (
+                <tr key={room._id} className='border-b border-primary/15 align-top even:bg-white/2'>
+                  <td className='px-3 py-4'>
+                    <p className='font-medium text-white'>{room.name}</p>
+                    <p className='text-xs text-gray-500'>
+                      {room.totalShowsCount > 0 ? `Đã từng có ${room.totalShowsCount} suất chiếu` : 'Chưa phát sinh suất chiếu'}
+                    </p>
+                  </td>
+                  <td className='px-3 py-4 text-gray-300'>{room.roomType}</td>
+                  <td className='px-3 py-4'>
+                    <span className={`rounded-full px-2.5 py-1 text-xs ${
+                      room.status === 'ACTIVE'
+                        ? 'bg-emerald-500/15 text-emerald-300'
+                        : room.status === 'MAINTENANCE'
+                          ? 'bg-amber-500/15 text-amber-300'
+                          : 'bg-gray-500/15 text-gray-300'
+                    }`}>
+                      {statusLabel[room.status] || room.status}
+                    </span>
+                  </td>
+                  <td className='px-3 py-4 text-gray-300'>{room.capacity} ghế</td>
+                  <td className='px-3 py-4 text-gray-300'>
+                    {room.futureShowsCount > 0 ? `${room.futureShowsCount} suất` : 'Không có'}
+                  </td>
+                  <td className='px-3 py-4'>
+                    <div className='flex flex-wrap justify-end gap-2'>
+                      {room.status !== 'MAINTENANCE' && (
                         <button
-                          onClick={() => fetchRoomDetail(room._id)}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10'
+                          onClick={() => handleQuickStatusUpdate(room, 'MAINTENANCE')}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10'
                         >
-                          <PenSquare className='h-3.5 w-3.5' />
-                          Sửa
+                          <Wrench className='h-3.5 w-3.5' />
+                          Bảo trì
                         </button>
+                      )}
+                      {room.status !== 'INACTIVE' && (
                         <button
-                          disabled={deletingId === room._id || room.totalShowsCount > 0}
-                          onClick={() => setDeleteTarget(room)}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
+                          onClick={() => handleQuickStatusUpdate(room, 'INACTIVE')}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-slate-500/30 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-500/10'
                         >
-                          <Trash2 className='h-3.5 w-3.5' />
-                          Xóa
+                          <CirclePause className='h-3.5 w-3.5' />
+                          Ngừng
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      )}
+                      {room.status !== 'ACTIVE' && (
+                        <button
+                          onClick={() => handleQuickStatusUpdate(room, 'ACTIVE')}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10'
+                        >
+                          <CheckCircle2 className='h-3.5 w-3.5' />
+                          Mở lại
+                        </button>
+                      )}
+                      <button
+                        onClick={() => fetchRoomDetail(room._id)}
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10'
+                      >
+                        <PenSquare className='h-3.5 w-3.5' />
+                        Sửa
+                      </button>
+                      <button
+                        disabled={deletingId === room._id || room.totalShowsCount > 0}
+                        onClick={() => setDeleteTarget(room)}
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
+                      >
+                        <Trash2 className='h-3.5 w-3.5' />
+                        Xóa
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-            {!loading && rooms.length === 0 && (
-              <div className='py-8 text-center text-sm text-gray-400'>Chưa có phòng chiếu nào.</div>
-            )}
-          </div>
-
-          {rooms.length > 0 && (
-            <div className='mt-5 flex flex-col gap-3 rounded-2xl border border-primary/20 bg-transparent px-4 py-3 md:flex-row md:items-center md:justify-between'>
-              <p className='text-sm text-gray-400'>
-                Hiển thị {startRow}-{endRow} trên tổng {rooms.length} phòng
-              </p>
-
-              <div className='flex items-center gap-2 self-end md:self-auto'>
-                <button
-                  type='button'
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
-                >
-                  <ChevronLeft className='h-4 w-4' />
-                  Trước
-                </button>
-
-                <div className='rounded-lg border border-white/10 px-3 py-2 text-sm text-white'>
-                  Trang {currentPage}/{totalPages}
-                </div>
-
-                <button
-                  type='button'
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
-                >
-                  Sau
-                  <ChevronRight className='h-4 w-4' />
-                </button>
-              </div>
-            </div>
+          {!loading && filteredRooms.length === 0 && (
+            <div className='py-8 text-center text-sm text-gray-400'>Không có phòng chiếu phù hợp với bộ lọc hiện tại.</div>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className='rounded-2xl border border-primary/20 bg-primary/8 p-5'>
-          <div className='flex items-center justify-between gap-4'>
-            <div>
-              <h2 className='text-lg font-medium'>{selectedRoom ? 'Cập nhật phòng' : 'Tạo phòng mới'}</h2>
-              <p className='text-sm text-gray-400'>
-                {selectedRoom
-                  ? 'Chỉ sửa sơ đồ ghế khi phòng không còn suất chiếu sắp tới.'
-                  : 'Sơ đồ ghế sẽ tự áp theo loại phòng để tránh lệch cấu hình thực tế.'}
-              </p>
-            </div>
-            {selectedRoom && (
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          disabled={filteredRooms.length === 0}
+        />
+      </div>
+
+      {formModalOpen && (
+        <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6'>
+          <form onSubmit={handleSubmit} className='max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-primary/20 bg-slate-950 p-5 shadow-[0_30px_100px_rgba(0,0,0,0.55)]'>
+            <div className='flex items-center justify-between gap-4'>
+              <div>
+                <h2 className='text-lg font-medium'>{selectedRoom ? 'Cập nhật phòng' : 'Tạo phòng mới'}</h2>
+                <p className='text-sm text-gray-400'>
+                  {selectedRoom
+                    ? 'Chỉ sửa sơ đồ ghế khi phòng không còn suất chiếu sắp tới.'
+                    : 'Sơ đồ ghế sẽ tự áp theo loại phòng để tránh lệch cấu hình thực tế.'}
+                </p>
+              </div>
               <button
                 type='button'
                 onClick={resetForm}
-                className='inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs text-gray-300 hover:bg-white/10'
+                className='inline-flex items-center gap-2 rounded-lg border border-white/15 p-2 text-gray-300 hover:bg-white/10'
               >
                 <XCircle className='h-4 w-4' />
-                Bỏ chọn
               </button>
-            )}
-          </div>
+            </div>
 
           <div className='mt-5 space-y-4'>
             <div>
@@ -641,6 +751,7 @@ const ManageRooms = () => {
           </button>
         </form>
       </div>
+      )}
 
       {deleteTarget && (
         <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4'>
