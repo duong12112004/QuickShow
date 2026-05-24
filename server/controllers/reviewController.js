@@ -179,6 +179,56 @@ export const rateBooking = async (req, res) => {
     }
 };
 
+export const submitBookingReview = async (req, res) => {
+    try {
+        const userId = ensureAuthenticatedUser(req);
+        const bookingId = `${req.body?.bookingId || ""}`.trim();
+        const rating = normalizeRating(req.body?.rating);
+        const comment = normalizeComment(req.body?.comment);
+        const hasSpoiler = Boolean(req.body?.hasSpoiler);
+
+        if (!bookingId) {
+            return res.json({ success: false, message: "Thiếu thông tin booking." });
+        }
+
+        if (comment.length > 1500) {
+            return res.json({ success: false, message: "Bình luận không được vượt quá 1500 ký tự." });
+        }
+
+        const booking = await ensureReviewableBooking({ userId, bookingId });
+        const movieId = `${booking.show?.movie?._id || booking.show?.movie || ""}`;
+        const userSnapshot = await getUserSnapshot(userId);
+        const review = await MovieReview.create({
+            movie: movieId,
+            user: userId,
+            ...userSnapshot,
+            comment,
+            hasSpoiler: Boolean(comment) && hasSpoiler,
+            rating,
+            booking: booking._id,
+            show: booking.show?._id,
+            isVerifiedViewer: true
+        });
+        const summary = await getMovieReviewSummary(movieId);
+
+        res.json({
+            success: true,
+            message: comment ? "Đã lưu đánh giá và bình luận của bạn." : "Đã lưu đánh giá của bạn.",
+            review: serializeReview(review),
+            summary
+        });
+    } catch (error) {
+        console.error(error.message);
+        const isDuplicateBooking = error?.code === 11000 && error?.keyPattern?.booking;
+        res.json({
+            success: false,
+            message: isDuplicateBooking
+                ? "Booking này đã được dùng để đánh giá phim."
+                : "Lỗi khi gửi đánh giá: " + error.message
+        });
+    }
+};
+
 export const getReviewSummaries = async (req, res) => {
     try {
         const movieIds = `${req.query?.movieIds || ""}`

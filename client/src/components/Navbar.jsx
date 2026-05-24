@@ -123,7 +123,7 @@ const Navbar = () => {
                 <img
                   src={poster}
                   alt={title}
-                  className='h-16 w-11 shrink-0 rounded-lg object-cover'
+                  className='h-20 w-14 shrink-0 rounded-lg object-cover'
                 />
                 <span className='min-w-0 flex-1'>
                   <span className='block truncate text-[15px] font-semibold text-white'>{title}</span>
@@ -135,9 +135,6 @@ const Navbar = () => {
                   <span className='mt-1 block truncate text-xs text-gray-400'>
                     {[releaseYear, movie.director].filter(Boolean).join(' • ')}
                   </span>
-                </span>
-                <span className='hidden shrink-0 text-xs font-medium text-primary sm:inline'>
-                  Chi tiết
                 </span>
               </button>
             )

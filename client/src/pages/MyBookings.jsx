@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { StarIcon } from 'lucide-react';
+import { MessageSquareIcon, StarIcon, XIcon } from 'lucide-react';
 import Loading from '../components/Loading';
 import BlurCircle from '../components/BlurCircle';
 import timeFormat from '../lib/timeFormat';
 import { dateFormat } from '../lib/dateFormat';
 import { useAppContext } from '../context/AppContext';
 import { getBookingStatusUi, getPaymentStatusUi } from '../lib/bookingStatus';
+
+const MAX_REVIEW_COMMENT_LENGTH = 1500;
+
+const initialReviewForm = {
+  rating: 0,
+  comment: '',
+  hasSpoiler: false
+};
 
 const MyBookings = () => {
   const { axios, getToken, user, image_base_url, wallet, fetchWallet, fetchShows } = useAppContext();
@@ -15,7 +23,8 @@ const MyBookings = () => {
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState('');
-  const [ratingDrafts, setRatingDrafts] = useState({});
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const [reviewForm, setReviewForm] = useState(initialReviewForm);
 
   const getMyBookings = async () => {
     try {
@@ -61,30 +70,51 @@ const MyBookings = () => {
     }
   };
 
-  const handleRateBooking = async (bookingId) => {
-    const rating = Number(ratingDrafts[bookingId] || 0);
+  const openReviewModal = (booking) => {
+    setReviewTarget(booking);
+    setReviewForm(initialReviewForm);
+  };
+
+  const closeReviewModal = () => {
+    if (processingId === reviewTarget?._id) return;
+
+    setReviewTarget(null);
+    setReviewForm(initialReviewForm);
+  };
+
+  const handleSubmitReview = async (event) => {
+    event.preventDefault();
+
+    if (!reviewTarget) return;
+
+    const rating = Number(reviewForm.rating || 0);
+    const comment = reviewForm.comment.trim();
 
     if (!rating) {
-      toast.error('Vui lòng chọn điểm từ 1 đến 10.');
+      toast.error('Vui lòng chọn điểm đánh giá từ 1 đến 10.');
+      return;
+    }
+
+    if (comment.length > MAX_REVIEW_COMMENT_LENGTH) {
+      toast.error(`Bình luận không được vượt quá ${MAX_REVIEW_COMMENT_LENGTH} ký tự.`);
       return;
     }
 
     try {
-      setProcessingId(bookingId);
-      const { data } = await axios.post('/api/reviews/rating', {
-        bookingId,
-        rating
+      setProcessingId(reviewTarget._id);
+      const { data } = await axios.post('/api/reviews/booking', {
+        bookingId: reviewTarget._id,
+        rating,
+        comment,
+        hasSpoiler: reviewForm.hasSpoiler
       }, {
         headers: { Authorization: `Bearer ${await getToken()}` }
       });
 
       if (data.success) {
         toast.success(data.message);
-        setRatingDrafts((current) => {
-          const next = { ...current };
-          delete next[bookingId];
-          return next;
-        });
+        setReviewTarget(null);
+        setReviewForm(initialReviewForm);
         await Promise.all([getMyBookings(), fetchShows()]);
       } else {
         toast.error(data.message);
@@ -106,6 +136,11 @@ const MyBookings = () => {
   if (isLoading) {
     return <Loading />;
   }
+
+  const reviewMovieTitle = reviewTarget?.movieTitle || reviewTarget?.show?.movie?.title || 'Phim không xác định';
+  const reviewPosterPath = reviewTarget?.show?.movie?.poster_path || reviewTarget?.show?.poster_path;
+  const reviewShowDateTime = reviewTarget?.showDateTime || reviewTarget?.show?.showDateTime;
+  const isSubmittingReview = processingId === reviewTarget?._id;
 
   return (
     <div className='relative min-h-[80vh] px-6 pt-30 md:px-10 md:pt-40 lg:px-16 xl:px-24'>
@@ -265,33 +300,24 @@ const MyBookings = () => {
                           <StarIcon className='h-4 w-4 fill-primary' />
                           Bạn đã đánh giá {item.quickShowRating.rating}/10
                         </div>
+                        {item.quickShowRating.comment && (
+                          <div className='mt-2 flex items-center gap-2 text-xs text-gray-300'>
+                            <MessageSquareIcon className='h-3.5 w-3.5' />
+                            Đã gửi kèm bình luận
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {item.canRateQuickShow && (
-                      <div className='rounded-xl border border-white/10 bg-white/5 p-3'>
-                        <p className='mb-2 text-sm font-medium text-white'>Đánh giá phim</p>
-                        <div className='flex gap-2'>
-                          <select
-                            value={ratingDrafts[item._id] || ''}
-                            onChange={(event) => setRatingDrafts((current) => ({ ...current, [item._id]: event.target.value }))}
-                            className='h-10 min-w-0 flex-1 rounded-full border border-white/10 bg-[#111827] px-3 text-sm text-white outline-none focus:border-primary/50'
-                          >
-                            <option value=''>Chọn điểm</option>
-                            {Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => (
-                              <option key={rating} value={rating}>{rating}/10</option>
-                            ))}
-                          </select>
-                          <button
-                            type='button'
-                            onClick={() => handleRateBooking(item._id)}
-                            disabled={processingId === item._id}
-                            className='rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-dull disabled:cursor-not-allowed disabled:opacity-60'
-                          >
-                            Gửi
-                          </button>
-                        </div>
-                      </div>
+                      <button
+                        type='button'
+                        onClick={() => openReviewModal(item)}
+                        className='inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary-dull'
+                      >
+                        <StarIcon className='h-4 w-4 fill-white' />
+                        Đánh giá phim
+                      </button>
                     )}
 
                     {!canPay && !canCancel && !item.canRateQuickShow && !item.quickShowRating && (
@@ -309,6 +335,142 @@ const MyBookings = () => {
             );
           })}
         </div>
+
+        {reviewTarget && (
+          <div
+            className='fixed inset-0 z-[120] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm'
+            onMouseDown={closeReviewModal}
+          >
+            <form
+              onSubmit={handleSubmitReview}
+              onMouseDown={(event) => event.stopPropagation()}
+              className='max-h-[calc(100vh-48px)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-[#11131c] shadow-[0_30px_100px_rgba(0,0,0,0.55)]'
+            >
+              <div className='flex items-start justify-between gap-4 border-b border-white/10 p-5 sm:p-6'>
+                <div className='flex min-w-0 gap-4'>
+                  {reviewPosterPath ? (
+                    <img
+                      src={image_base_url + reviewPosterPath}
+                      alt={reviewMovieTitle}
+                      className='h-24 w-16 shrink-0 rounded-xl object-cover'
+                    />
+                  ) : (
+                    <div className='flex h-24 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-[10px] text-slate-400'>
+                      Không có ảnh
+                    </div>
+                  )}
+
+                  <div className='min-w-0'>
+                    <p className='text-xs font-medium uppercase tracking-[0.22em] text-primary/80'>Đánh giá phim</p>
+                    <h2 className='mt-2 line-clamp-2 text-xl font-semibold text-white'>{reviewMovieTitle}</h2>
+                    <p className='mt-2 text-sm text-gray-400'>
+                      {reviewShowDateTime ? dateFormat(reviewShowDateTime) : 'Suất chiếu đã kết thúc'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type='button'
+                  onClick={closeReviewModal}
+                  disabled={isSubmittingReview}
+                  className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60'
+                  aria-label='Đóng đánh giá'
+                >
+                  <XIcon className='h-5 w-5' />
+                </button>
+              </div>
+
+              <div className='space-y-6 p-5 sm:p-6'>
+                <div>
+                  <div className='mb-3 flex items-center justify-between gap-3'>
+                    <p className='text-sm font-medium text-white'>Điểm đánh giá</p>
+                    <p className='text-sm font-semibold text-yellow-300'>
+                      {reviewForm.rating ? `${reviewForm.rating}/10` : 'Chưa chọn'}
+                    </p>
+                  </div>
+
+                  <div className='grid grid-cols-5 gap-2 sm:grid-cols-10'>
+                    {Array.from({ length: 10 }, (_, index) => {
+                      const rating = index + 1;
+                      const isSelected = reviewForm.rating >= rating;
+
+                      return (
+                        <button
+                          key={rating}
+                          type='button'
+                          onClick={() => setReviewForm((current) => ({ ...current, rating }))}
+                          className={`flex h-11 items-center justify-center rounded-xl border text-yellow-300 transition ${
+                            isSelected
+                              ? 'border-yellow-300/50 bg-yellow-300/15'
+                              : 'border-white/10 bg-white/5 hover:border-yellow-300/40 hover:bg-yellow-300/10'
+                          }`}
+                          aria-label={`Chọn ${rating}/10`}
+                        >
+                          <StarIcon className={`h-5 w-5 text-yellow-300 ${isSelected ? 'fill-yellow-300' : 'fill-transparent'}`} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className='mb-3 flex items-center justify-between gap-3'>
+                    <label htmlFor='booking-review-comment' className='text-sm font-medium text-white'>
+                      Bình luận
+                    </label>
+                    <span className='text-xs text-gray-500'>
+                      {reviewForm.comment.length} / {MAX_REVIEW_COMMENT_LENGTH}
+                    </span>
+                  </div>
+
+                  <textarea
+                    id='booking-review-comment'
+                    value={reviewForm.comment}
+                    onChange={(event) => setReviewForm((current) => ({
+                      ...current,
+                      comment: event.target.value,
+                      hasSpoiler: event.target.value.trim() ? current.hasSpoiler : false
+                    }))}
+                    maxLength={MAX_REVIEW_COMMENT_LENGTH}
+                    rows={5}
+                    placeholder='Chia sẻ cảm nhận của bạn về bộ phim...'
+                    className='min-h-32 w-full resize-none rounded-2xl border border-white/10 bg-[#080a12] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-500 focus:border-primary/50'
+                  />
+
+                  <label className='mt-3 inline-flex items-center gap-2 text-sm text-gray-300'>
+                    <input
+                      type='checkbox'
+                      checked={reviewForm.hasSpoiler}
+                      onChange={(event) => setReviewForm((current) => ({ ...current, hasSpoiler: event.target.checked }))}
+                      disabled={!reviewForm.comment.trim()}
+                      className='h-4 w-4 accent-yellow-300 disabled:cursor-not-allowed disabled:opacity-50'
+                    />
+                    Bình luận có tiết lộ nội dung phim
+                  </label>
+                </div>
+              </div>
+
+              <div className='flex flex-col-reverse gap-3 border-t border-white/10 p-5 sm:flex-row sm:justify-end sm:p-6'>
+                <button
+                  type='button'
+                  onClick={closeReviewModal}
+                  disabled={isSubmittingReview}
+                  className='rounded-full border border-white/10 px-5 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  Hủy
+                </button>
+                <button
+                  type='submit'
+                  disabled={!reviewForm.rating || isSubmittingReview}
+                  className='inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary-dull disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  <StarIcon className='h-4 w-4 fill-white' />
+                  {isSubmittingReview ? 'Đang gửi...' : 'Gửi đánh giá'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

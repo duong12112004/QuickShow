@@ -21,7 +21,7 @@ const AdminSidebar = () => {
     { name: "Quản lý phòng chiếu", path: "/admin/rooms", icon: ListIcon },
     { name: "Quản lý suất chiếu", path: "/admin/showtimes", icon: CalendarRangeIcon },
     { name: "Danh sách đặt vé", path: "/admin/list-bookings", icon: ListCollapseIcon },
-    { name: "Danh sách bình luận", path: "/admin/reviews", icon: MessageSquareIcon }
+    { name: "Đánh giá & bình luận", path: "/admin/reviews", icon: MessageSquareIcon }
   ];
 
   return (

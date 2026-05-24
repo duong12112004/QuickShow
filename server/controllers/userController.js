@@ -57,11 +57,13 @@ export const getUserBookings = async (req, res) => {
         const ratingReviews = await MovieReview.find({
             booking: { $in: bookingIds },
             rating: { $ne: null }
-        }).select("booking rating createdAt");
+        }).select("booking rating comment hasSpoiler createdAt");
         const ratingByBookingId = new Map(ratingReviews.map((review) => [
             review.booking.toString(),
             {
                 rating: review.rating,
+                comment: review.comment,
+                hasSpoiler: review.hasSpoiler,
                 createdAt: review.createdAt
             }
         ]));

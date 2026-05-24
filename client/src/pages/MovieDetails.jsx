@@ -33,6 +33,7 @@ import {
 } from '../lib/movieDisplay'
 
 const MAX_COMMENT_LENGTH = 1500
+const COMMENTS_PAGE_SIZE = 5
 
 const MovieDetails = () => {
   const navigate = useNavigate()
@@ -41,6 +42,7 @@ const MovieDetails = () => {
   const [show, setShow] = useState(null)
   const [trailerEmbedUrl, setTrailerEmbedUrl] = useState('')
   const [comments, setComments] = useState([])
+  const [visibleCommentCount, setVisibleCommentCount] = useState(COMMENTS_PAGE_SIZE)
   const [visibleSpoilers, setVisibleSpoilers] = useState(new Set())
   const [commentForm, setCommentForm] = useState({
     comment: '',
@@ -151,6 +153,10 @@ const MovieDetails = () => {
     })
   }
 
+  const showMoreComments = () => {
+    setVisibleCommentCount((current) => current + COMMENTS_PAGE_SIZE)
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -173,6 +179,8 @@ const MovieDetails = () => {
   }, [axios, id])
 
   useEffect(() => {
+    setVisibleCommentCount(COMMENTS_PAGE_SIZE)
+    setVisibleSpoilers(new Set())
     fetchMovieComments(id)
   }, [fetchMovieComments, id])
 
@@ -207,6 +215,8 @@ const MovieDetails = () => {
   const countries = formatCountries(movie.production_countries)
   const languages = formatLanguages(movie.spoken_languages)
   const certification = formatCertification(movie)
+  const visibleComments = comments.slice(0, visibleCommentCount)
+  const hasMoreComments = visibleCommentCount < comments.length
 
   return (
     <div className='px-6 pt-30 md:px-16 md:pt-50 lg:px-40'>
@@ -285,7 +295,7 @@ const MovieDetails = () => {
           </div>
         </section>
 
-        <section className='rounded-[1.5rem] border border-transparent bg-transparent p-0 md:p-0'>
+        <section className='rounded-3xl border border-transparent bg-transparent p-0 md:p-0'>
           <div className='flex items-center gap-3'>
             <MessageSquareIcon className='h-6 w-6 text-white' />
             <h2 className='text-2xl font-semibold text-white'>Bình luận ({comments.length})</h2>
@@ -337,21 +347,21 @@ const MovieDetails = () => {
                 <button
                   type='submit'
                   disabled={!user || isSubmittingComment}
-                  className='inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60'
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60 ${commentForm.hasSpoiler ? 'text-yellow-300' : 'text-primary'}`}
                 >
                   {isSubmittingComment ? 'Đang gửi...' : 'Gửi'}
-                  <SendIcon className='h-5 w-5 fill-yellow-300 text-yellow-300' />
+                  <SendIcon className={`h-5 w-5 ${commentForm.hasSpoiler ? 'fill-yellow-300 text-yellow-300' : 'fill-primary text-primary'}`} />
                 </button>
               </div>
             </div>
           </form>
 
-          <div className='mt-10 space-y-6'>
+          <div className='mt-10 space-y-8'>
             {comments.length === 0 ? (
               <div className='rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-gray-400'>
                 Chưa có bình luận nào cho phim này.
               </div>
-            ) : comments.map((comment) => {
+            ) : visibleComments.map((comment) => {
               const isSpoilerHidden = comment.hasSpoiler && !visibleSpoilers.has(comment._id)
 
               return (
@@ -373,9 +383,15 @@ const MovieDetails = () => {
                           Spoiler
                         </span>
                       )}
+                      {comment.rating && (
+                        <span className='inline-flex items-center gap-1 rounded-full border border-yellow-300/20 bg-yellow-300/10 px-2 py-0.5 text-xs text-yellow-300'>
+                          <StarIcon className='h-3 w-3 fill-yellow-300' />
+                          {comment.rating}/10
+                        </span>
+                      )}
                     </div>
 
-                    <div className='relative mt-2'>
+                    <div className='mt-2'>
                       <p className={`whitespace-pre-line text-sm leading-6 text-gray-300 transition ${isSpoilerHidden ? 'select-none blur-sm' : ''}`}>
                         {comment.comment}
                       </p>
@@ -383,9 +399,9 @@ const MovieDetails = () => {
                         <button
                           type='button'
                           onClick={() => revealSpoiler(comment._id)}
-                          className='absolute inset-0 m-auto flex h-9 w-fit items-center gap-2 rounded-full border border-white/15 bg-black/80 px-4 text-sm font-medium text-white backdrop-blur transition hover:border-primary/40'
+                          className='mt-3 inline-flex h-8 items-center gap-2 rounded-full border border-yellow-300/20 bg-black/60 px-3 text-xs font-medium text-yellow-300 backdrop-blur transition hover:border-yellow-300/50'
                         >
-                          <EyeIcon className='h-4 w-4 text-primary' />
+                          <EyeIcon className='h-4 w-4 text-yellow-300' />
                           Xem bình luận
                         </button>
                       )}
@@ -394,6 +410,18 @@ const MovieDetails = () => {
                 </article>
               )
             })}
+
+            {hasMoreComments && (
+              <div className='flex justify-start pt-1 pl-14'>
+                <button
+                  type='button'
+                  onClick={showMoreComments}
+                  className='text-sm font-medium text-primary transition hover:text-primary-dull'
+                >
+                  Xem thêm bình luận
+                </button>
+              </div>
+            )}
           </div>
         </section>
       </div>

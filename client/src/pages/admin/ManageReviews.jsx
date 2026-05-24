@@ -53,14 +53,14 @@ const ManageReviews = () => {
       }
     } catch (error) {
       console.error(error)
-      toast.error('Không thể tải danh sách bình luận.')
+      toast.error('Không thể tải danh sách đánh giá.')
     } finally {
       setIsLoading(false)
     }
   }, [axios, getToken, searchValue, statusFilter])
 
   const handleHideReview = async (review) => {
-    const hiddenReason = window.prompt('Lý do ẩn bình luận:', review.hiddenReason || 'Nội dung không phù hợp.')
+    const hiddenReason = window.prompt('Lý do ẩn đánh giá:', review.hiddenReason || 'Nội dung không phù hợp.')
     if (hiddenReason === null) return
 
     try {
@@ -79,7 +79,7 @@ const ManageReviews = () => {
       }
     } catch (error) {
       console.error(error)
-      toast.error('Không thể ẩn bình luận lúc này.')
+      toast.error('Không thể ẩn đánh giá lúc này.')
     } finally {
       setProcessingId('')
     }
@@ -100,7 +100,7 @@ const ManageReviews = () => {
       }
     } catch (error) {
       console.error(error)
-      toast.error('Không thể khôi phục bình luận lúc này.')
+      toast.error('Không thể khôi phục đánh giá lúc này.')
     } finally {
       setProcessingId('')
     }
@@ -121,9 +121,9 @@ const ManageReviews = () => {
     <div className='space-y-6'>
       <div className='flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between'>
         <div>
-          <h1 className='text-2xl font-semibold text-white'>Quản lý bình luận</h1>
+          <h1 className='text-2xl font-semibold text-white'>Quản lý đánh giá</h1>
           <p className='mt-2 text-sm text-gray-400'>
-            Ẩn hoặc khôi phục bình luận người dùng. Hệ thống không xóa cứng dữ liệu để giữ lịch sử kiểm duyệt.
+            Ẩn hoặc khôi phục đánh giá và bình luận người dùng. Hệ thống không xóa cứng dữ liệu để giữ lịch sử kiểm duyệt.
           </p>
         </div>
 
@@ -149,7 +149,7 @@ const ManageReviews = () => {
           <input
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            placeholder='Tìm theo phim, người dùng hoặc nội dung...'
+            placeholder='Tìm theo phim, người dùng hoặc nội dung đánh giá...'
             className='h-11 w-full rounded-full border border-white/10 bg-[#111827] pl-11 pr-4 text-sm text-white outline-none focus:border-primary/50'
           />
         </label>
@@ -191,11 +191,11 @@ const ManageReviews = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className='px-4 py-10 text-center text-gray-400'>Đang tải bình luận...</td>
+                  <td colSpan={7} className='px-4 py-10 text-center text-gray-400'>Đang tải đánh giá...</td>
                 </tr>
               ) : reviews.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className='px-4 py-10 text-center text-gray-400'>Không có bình luận phù hợp.</td>
+                  <td colSpan={7} className='px-4 py-10 text-center text-gray-400'>Không có đánh giá phù hợp.</td>
                 </tr>
               ) : reviews.map((review) => (
                 <tr key={review._id} className='border-b border-white/10 align-top last:border-0'>
