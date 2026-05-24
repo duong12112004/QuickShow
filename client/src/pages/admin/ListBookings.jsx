@@ -10,7 +10,6 @@ import {
   TicketCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Loading from '../../components/Loading';
 import Title from '../../components/admin/Title';
 import { dateFormat } from '../../lib/dateFormat';
 import { useAppContext } from '../../context/AppContext';
@@ -46,7 +45,7 @@ const darkOptionClassName = 'bg-slate-950 text-white';
 
 const ListBookings = () => {
   const currency = import.meta.env.VITE_CURRENCY;
-  const { axios, getToken, user } = useAppContext();
+  const { axios, getToken, user, image_base_url } = useAppContext();
 
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -209,10 +208,6 @@ const ListBookings = () => {
     }
   }, [bookings.length, currentPage]);
 
-  if (isLoading) {
-    return <Loading />;
-  }
-
   return (
     <div className='space-y-8'>
       <Title text1='Quản lý' text2='Booking' />
@@ -305,7 +300,9 @@ const ListBookings = () => {
 
           <div className='mt-4 flex items-center justify-between text-xs text-gray-400'>
             <p>
-              {bookings.length > 0
+              {isLoading
+                ? 'Đang tải dữ liệu booking...'
+                : bookings.length > 0
                 ? `Đang hiển thị ${startRow}-${endRow} trên tổng ${bookings.length} booking`
                 : 'Không có booking phù hợp'}
             </p>
@@ -349,8 +346,13 @@ const ListBookings = () => {
             </tr>
           </thead>
           <tbody>
-            {paginatedBookings.map((item) => {
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} className='p-6 text-center text-gray-400'>Đang tải dữ liệu booking...</td>
+              </tr>
+            ) : paginatedBookings.map((item) => {
               const movieTitle = item.movieTitle || item.show?.movie?.title || 'Phim không xác định';
+              const posterPath = item.show?.movie?.poster_path || item.show?.poster_path;
               const roomName = item.roomName || item.show?.room?.name || 'Chưa có dữ liệu';
               const showDateTime = item.showDateTime || item.show?.showDateTime;
               const bookingStatus = getBookingStatusUi(item.bookingStatus);
@@ -373,9 +375,25 @@ const ListBookings = () => {
                     <div className='mt-1 text-xs text-gray-400'>{item.user?.email || 'Không có email'}</div>
                   </td>
                   <td className='p-3'>
-                    <div className='font-medium text-white'>{movieTitle}</div>
-                    <div className='mt-1 text-xs text-gray-400'>Phòng: {roomName}</div>
-                    <div className='mt-1 text-xs text-gray-400'>{showDateTime ? dateFormat(showDateTime) : 'Chưa có dữ liệu'}</div>
+                    <div className='flex gap-3'>
+                      {posterPath ? (
+                        <img
+                          src={image_base_url + posterPath}
+                          alt={movieTitle}
+                          className='h-20 w-14 shrink-0 rounded-xl object-cover'
+                        />
+                      ) : (
+                        <div className='flex h-20 w-14 shrink-0 items-center justify-center rounded-xl bg-black/20 text-[10px] text-gray-500'>
+                          No poster
+                        </div>
+                      )}
+
+                      <div className='min-w-0'>
+                        <div className='line-clamp-2 font-medium text-white'>{movieTitle}</div>
+                        <div className='mt-1 text-xs text-gray-400'>Phòng: {roomName}</div>
+                        <div className='mt-1 text-xs text-gray-400'>{showDateTime ? dateFormat(showDateTime) : 'Chưa có dữ liệu'}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className='p-3 text-gray-200'>{item.bookedSeats.join(', ')}</td>
                   <td className='p-3'>
@@ -434,7 +452,7 @@ const ListBookings = () => {
           </tbody>
         </table>
 
-        {!bookings.length && (
+        {!isLoading && !bookings.length && (
           <div className='p-6 text-sm text-gray-400'>
             Không có booking nào phù hợp với bộ lọc hiện tại.
           </div>

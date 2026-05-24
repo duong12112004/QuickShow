@@ -8,12 +8,12 @@ import {
   PlusCircle,
   RefreshCw,
   Save,
+  Search,
   StarIcon,
   Trash2,
   XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import Loading from '../../components/Loading'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
 import { dateFormat, formatToDateTimeLocal, getCurrentDateTimeLocal } from '../../lib/dateFormat'
@@ -79,6 +79,7 @@ const sortShowtimes = (left, right) => {
 }
 
 const darkSelectClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none'
+const darkInputClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-primary'
 const darkOptionClassName = 'bg-slate-950 text-white'
 
 const ManageShowtimes = () => {
@@ -224,6 +225,15 @@ const ManageShowtimes = () => {
 
   const selectedMovie = movieOptions.find((movie) => movie._id === String(selectedMovieId))
   const editSelectedRoom = rooms.find((room) => room._id === editForm.roomId)
+
+  const stats = useMemo(() => ({
+    total: showtimes.length,
+    upcoming: showtimes.filter((showtime) => showtime.lifecycle === 'UPCOMING').length,
+    inProgress: showtimes.filter((showtime) => showtime.lifecycle === 'IN_PROGRESS').length,
+    ended: showtimes.filter((showtime) => showtime.lifecycle === 'ENDED').length,
+    cancelled: showtimes.filter((showtime) => showtime.lifecycle === 'CANCELLED').length,
+    soldSeats: showtimes.reduce((sum, showtime) => sum + Number(showtime.soldSeatCount || 0), 0),
+  }), [showtimes])
 
   const resetFilters = () => {
     setSearchValue('')
@@ -418,20 +428,43 @@ const ManageShowtimes = () => {
     }
   }
 
-  if (loading) {
-    return <Loading />
-  }
-
   return (
     <div className='space-y-8'>
       <Title text1='Quản lý' text2='Suất chiếu' />
 
+      <div className='grid gap-4 md:grid-cols-3 xl:grid-cols-6'>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Tổng suất</p>
+          <p className='mt-2 text-2xl font-semibold text-white'>{stats.total}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Sắp chiếu</p>
+          <p className='mt-2 text-2xl font-semibold text-emerald-300'>{stats.upcoming}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Đang chiếu</p>
+          <p className='mt-2 text-2xl font-semibold text-sky-300'>{stats.inProgress}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Đã kết thúc</p>
+          <p className='mt-2 text-2xl font-semibold text-gray-300'>{stats.ended}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Đã hủy</p>
+          <p className='mt-2 text-2xl font-semibold text-rose-300'>{stats.cancelled}</p>
+        </div>
+        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='text-sm text-gray-400'>Ghế đã bán</p>
+          <p className='mt-2 text-2xl font-semibold text-primary'>{stats.soldSeats}</p>
+        </div>
+      </div>
+
       <div className='rounded-2xl border border-primary/20 bg-primary/8 p-5'>
         <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
           <div>
-            <h2 className='text-lg font-medium'>Danh sách suất chiếu</h2>
+            <h2 className='text-lg font-medium'>Bộ lọc suất chiếu</h2>
             <p className='text-sm text-gray-400'>
-              Quản lý lịch chiếu theo phim, phòng, giá vé và trạng thái vận hành.
+              Quản lý lịch chiếu theo phim, phòng, ngày chiếu và trạng thái vận hành.
             </p>
           </div>
 
@@ -454,12 +487,15 @@ const ManageShowtimes = () => {
         </div>
 
         <div className='mt-5 grid gap-3 md:grid-cols-3'>
-          <input
-            value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
-            placeholder='Tìm theo phim hoặc phòng'
-            className='rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none'
-          />
+          <label className='relative block'>
+            <Search className='pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500' />
+            <input
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              placeholder='Tìm theo phim hoặc phòng'
+              className={`${darkInputClassName} pl-11`}
+            />
+          </label>
 
           <select
             value={statusFilter}
@@ -477,157 +513,177 @@ const ManageShowtimes = () => {
             type='date'
             value={dateFilter}
             onChange={(event) => setDateFilter(event.target.value)}
-            className='rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none'
+            className={darkInputClassName}
           />
         </div>
 
-        <div className='mt-5 overflow-x-auto rounded-2xl border border-primary/20 bg-transparent'>
-          <table className='min-w-full text-sm'>
-            <thead className='text-left text-white'>
-              <tr className='border-b border-primary/20 bg-primary/12'>
-                <th className='px-3 py-3 font-medium'>Phim</th>
-                <th className='px-3 py-3 font-medium'>Phòng</th>
-                <th className='px-3 py-3 font-medium'>Lịch chiếu</th>
-                <th className='px-3 py-3 font-medium'>Vận hành</th>
-                <th className='px-3 py-3 font-medium'>Giá vé</th>
-                <th className='px-3 py-3 font-medium'>Trạng thái</th>
-                <th className='px-3 py-3 font-medium'>Đã bán</th>
-                <th className='px-3 py-3 font-medium text-right'>Tác vụ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedShowtimes.map((showtime) => {
-                const canEdit =
-                  showtime.lifecycle === 'UPCOMING' &&
-                  showtime.status === 'SCHEDULED' &&
-                  !showtime.hasSales &&
-                  showtime.heldSeatCount === 0
-
-                const canCancel =
-                  showtime.status === 'SCHEDULED' &&
-                  showtime.lifecycle !== 'ENDED' &&
-                  !showtime.hasSales
-
-                const canDelete =
-                  (showtime.lifecycle === 'UPCOMING' || showtime.lifecycle === 'CANCELLED') &&
-                  !showtime.hasSales &&
-                  showtime.heldSeatCount === 0
-
-                return (
-                  <tr key={showtime._id} className='border-b border-primary/15 align-top even:bg-white/[0.02]'>
-                    <td className='px-3 py-4'>
-                      <p className='font-medium text-white'>{showtime.movie?.title}</p>
-                      <p className='text-xs text-gray-500'>
-                        {showtime.movie?.release_date ? `Khởi chiếu phim: ${showtime.movie.release_date}` : 'Phim TMDB'}
-                      </p>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>
-                      <p>{showtime.room?.name}</p>
-                      <p className='text-xs text-gray-500'>{showtime.room?.roomType}</p>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>
-                      <p>{dateFormat(showtime.showDateTime)}</p>
-                      <p className='text-xs text-gray-500'>Kết thúc: {dateFormat(showtime.endDateTime)}</p>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>
-                      <p>{formatDuration(showtime.runtimeMinutes)}</p>
-                      <p className='text-xs text-gray-500'>Dọn phòng: {formatDuration(showtime.cleanupMinutes)}</p>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>{formatMoney(showtime.basePrice, currency)}</td>
-                    <td className='px-3 py-4'>
-                      <span className={`rounded-full px-2.5 py-1 text-xs ${
-                        showtime.lifecycle === 'UPCOMING'
-                          ? 'bg-emerald-500/15 text-emerald-300'
-                          : showtime.lifecycle === 'IN_PROGRESS'
-                            ? 'bg-sky-500/15 text-sky-300'
-                            : showtime.lifecycle === 'CANCELLED'
-                              ? 'bg-red-500/15 text-red-300'
-                              : 'bg-gray-500/15 text-gray-300'
-                      }`}>
-                        {lifecycleLabelMap[showtime.lifecycle] || showtime.lifecycle}
-                      </span>
-                    </td>
-                    <td className='px-3 py-4 text-gray-300'>
-                      <p>{showtime.soldSeatCount} ghế</p>
-                      {showtime.heldSeatCount > 0 && (
-                        <p className='text-xs text-amber-300'>Giữ chỗ: {showtime.heldSeatCount}</p>
-                      )}
-                    </td>
-                    <td className='px-3 py-4'>
-                      <div className='flex flex-wrap justify-end gap-2'>
-                        <button
-                          onClick={() => openEditModal(showtime)}
-                          disabled={!canEdit}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40'
-                        >
-                          <PenSquare className='h-3.5 w-3.5' />
-                          Sửa
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCancelTarget(showtime)
-                            setCancelReason(showtime.cancellationReason || '')
-                          }}
-                          disabled={!canCancel}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40'
-                        >
-                          <CirclePause className='h-3.5 w-3.5' />
-                          Hủy
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(showtime)}
-                          disabled={!canDelete}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
-                        >
-                          <Trash2 className='h-3.5 w-3.5' />
-                          Xóa
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-
-          {!loading && filteredShowtimes.length === 0 && (
-            <div className='py-8 text-center text-sm text-gray-400'>Chưa có suất chiếu phù hợp với bộ lọc.</div>
-          )}
+        <div className='mt-4 flex items-center justify-between text-xs text-gray-400'>
+          <p>
+            {loading
+              ? 'Đang tải dữ liệu suất chiếu...'
+              : filteredShowtimes.length > 0
+                ? `Đang hiển thị ${startRow}-${endRow} trên tổng ${filteredShowtimes.length} suất chiếu`
+                : 'Không có suất chiếu phù hợp'}
+          </p>
         </div>
+      </div>
 
-        {filteredShowtimes.length > 0 && (
-          <div className='mt-5 flex flex-col gap-3 rounded-2xl border border-primary/20 bg-transparent px-4 py-3 md:flex-row md:items-center md:justify-between'>
-            <p className='text-sm text-gray-400'>
-              Hiển thị {startRow}-{endRow} trên tổng {filteredShowtimes.length} suất chiếu
-            </p>
+      <div className='overflow-x-auto rounded-2xl border border-primary/20 bg-primary/8'>
+        <table className='w-full min-w-[1180px] border-collapse text-left text-sm'>
+          <thead>
+            <tr className='border-b border-primary/20 bg-primary/12 text-white'>
+              <th className='p-3 pl-5 font-medium'>Phim</th>
+              <th className='p-3 font-medium'>Phòng</th>
+              <th className='p-3 font-medium'>Lịch chiếu</th>
+              <th className='p-3 font-medium'>Vận hành</th>
+              <th className='p-3 font-medium'>Giá vé</th>
+              <th className='p-3 font-medium'>Trạng thái</th>
+              <th className='p-3 font-medium'>Đã bán</th>
+              <th className='p-3 font-medium text-right'>Tác vụ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={8} className='p-6 text-center text-gray-400'>Đang tải dữ liệu suất chiếu...</td>
+              </tr>
+            ) : paginatedShowtimes.map((showtime) => {
+              const canEdit =
+                showtime.lifecycle === 'UPCOMING' &&
+                showtime.status === 'SCHEDULED' &&
+                !showtime.hasSales &&
+                showtime.heldSeatCount === 0
 
-            <div className='flex items-center gap-2 self-end md:self-auto'>
-              <button
-                type='button'
-                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
-              >
-                <ChevronLeft className='h-4 w-4' />
-                Trước
-              </button>
+              const canCancel =
+                showtime.status === 'SCHEDULED' &&
+                showtime.lifecycle !== 'ENDED' &&
+                !showtime.hasSales
 
-              <div className='rounded-lg border border-white/10 px-3 py-2 text-sm text-white'>
-                Trang {currentPage}/{totalPages}
-              </div>
+              const canDelete =
+                (showtime.lifecycle === 'UPCOMING' || showtime.lifecycle === 'CANCELLED') &&
+                !showtime.hasSales &&
+                showtime.heldSeatCount === 0
+              const posterPath = showtime.movie?.poster_path
 
-              <button
-                type='button'
-                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className='inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
-              >
-                Sau
-                <ChevronRight className='h-4 w-4' />
-              </button>
-            </div>
-          </div>
+              return (
+                <tr key={showtime._id} className='border-b border-primary/15 align-top even:bg-white/[0.02] last:border-0'>
+                  <td className='p-3 pl-5'>
+                    <div className='flex gap-3'>
+                      {posterPath ? (
+                        <img
+                          src={image_base_url + posterPath}
+                          alt={showtime.movie?.title || 'Movie'}
+                          className='h-20 w-14 shrink-0 rounded-xl object-cover'
+                        />
+                      ) : (
+                        <div className='flex h-20 w-14 shrink-0 items-center justify-center rounded-xl bg-black/20 text-[10px] text-gray-500'>
+                          No poster
+                        </div>
+                      )}
+                      <div className='min-w-0'>
+                        <p className='line-clamp-2 font-medium text-white'>{showtime.movie?.title || 'Phim không xác định'}</p>
+                        <p className='mt-1 text-xs text-gray-500'>
+                          {showtime.movie?.release_date ? `Khởi chiếu phim: ${showtime.movie.release_date}` : 'Phim TMDB'}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className='p-3 text-gray-300'>
+                    <p>{showtime.room?.name}</p>
+                    <p className='text-xs text-gray-500'>{showtime.room?.roomType}</p>
+                  </td>
+                  <td className='p-3 text-gray-300'>
+                    <p>{dateFormat(showtime.showDateTime)}</p>
+                    <p className='text-xs text-gray-500'>Kết thúc: {dateFormat(showtime.endDateTime)}</p>
+                  </td>
+                  <td className='p-3 text-gray-300'>
+                    <p>{formatDuration(showtime.runtimeMinutes)}</p>
+                    <p className='text-xs text-gray-500'>Dọn phòng: {formatDuration(showtime.cleanupMinutes)}</p>
+                  </td>
+                  <td className='p-3 text-gray-300'>{formatMoney(showtime.basePrice, currency)}</td>
+                  <td className='p-3'>
+                    <span className={`rounded-full px-2.5 py-1 text-xs ${
+                      showtime.lifecycle === 'UPCOMING'
+                        ? 'bg-emerald-500/15 text-emerald-300'
+                        : showtime.lifecycle === 'IN_PROGRESS'
+                          ? 'bg-sky-500/15 text-sky-300'
+                          : showtime.lifecycle === 'CANCELLED'
+                            ? 'bg-red-500/15 text-red-300'
+                            : 'bg-gray-500/15 text-gray-300'
+                    }`}>
+                      {lifecycleLabelMap[showtime.lifecycle] || showtime.lifecycle}
+                    </span>
+                  </td>
+                  <td className='p-3 text-gray-300'>
+                    <p>{showtime.soldSeatCount} ghế</p>
+                    {showtime.heldSeatCount > 0 && (
+                      <p className='text-xs text-amber-300'>Giữ chỗ: {showtime.heldSeatCount}</p>
+                    )}
+                  </td>
+                  <td className='p-3'>
+                    <div className='flex flex-wrap justify-end gap-2'>
+                      <button
+                        onClick={() => openEditModal(showtime)}
+                        disabled={!canEdit}
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40'
+                      >
+                        <PenSquare className='h-3.5 w-3.5' />
+                        Sửa
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCancelTarget(showtime)
+                          setCancelReason(showtime.cancellationReason || '')
+                        }}
+                        disabled={!canCancel}
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40'
+                      >
+                        <CirclePause className='h-3.5 w-3.5' />
+                        Hủy
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(showtime)}
+                        disabled={!canDelete}
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
+                      >
+                        <Trash2 className='h-3.5 w-3.5' />
+                        Xóa
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        {!loading && filteredShowtimes.length === 0 && (
+          <div className='p-6 text-sm text-gray-400'>Chưa có suất chiếu phù hợp với bộ lọc hiện tại.</div>
         )}
+      </div>
+
+      <div className='flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300 md:flex-row md:items-center md:justify-between'>
+        <p>Trang {currentPage}/{totalPages}</p>
+        <div className='flex items-center gap-2'>
+          <button
+            type='button'
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50'
+          >
+            <ChevronLeft className='h-4 w-4' />
+            Trước
+          </button>
+          <button
+            type='button'
+            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages || filteredShowtimes.length === 0}
+            className='inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50'
+          >
+            Sau
+            <ChevronRight className='h-4 w-4' />
+          </button>
+        </div>
       </div>
 
       {createModalOpen && (
