@@ -265,6 +265,12 @@ export const getAdminReviews = async (req, res) => {
 
         const reviews = await MovieReview.find(query)
             .populate("movie", "title titleVi poster_path")
+            .populate("booking", "bookingCode bookedSeats amount roomName movieTitle showDateTime bookingStatus paymentStatus")
+            .populate({
+                path: "show",
+                select: "showDateTime room",
+                populate: { path: "room", select: "name roomType" }
+            })
             .sort({ createdAt: -1 })
             .limit(300);
 
