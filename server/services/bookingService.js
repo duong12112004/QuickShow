@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import crypto from "crypto";
 import Show from "../models/Show.js";
 import { getShowtimeLifecycle } from "./showtimeService.js";
 import { creditWallet, reverseWalletDebit } from "./walletService.js";
@@ -44,6 +45,8 @@ export const PAYMENT_HOLD_MINUTES = 30;
 export const USER_CANCELLATION_NOTICE_HOURS = 24;
 export const USER_REFUND_RATE = 0.8;
 export const FULL_REFUND_RATE = 1;
+export const CHECK_IN_EARLY_WINDOW_MINUTES = 120;
+export const QR_TOKEN_PREFIX = "qsqr.v1";
 
 const STRIPE_SEAT_TYPE_PRICING = {
     STANDARD: (basePrice) => basePrice,
@@ -55,6 +58,83 @@ export const createBookingCode = () => {
     const timestamp = Date.now().toString().slice(-6);
     const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
     return `QS${timestamp}${randomPart}`;
+};
+
+const getQrCheckInSecret = () => (
+    process.env.QR_CHECK_IN_SECRET
+    || process.env.JWT_SECRET
+    || process.env.STRIPE_SECRET_KEY
+    || ""
+);
+
+const base64UrlEncode = (value) => Buffer
+    .from(value)
+    .toString("base64url");
+
+const base64UrlDecode = (value) => Buffer
+    .from(value, "base64url")
+    .toString("utf8");
+
+const signQrPayload = (payload) => {
+    const secret = getQrCheckInSecret();
+
+    if (!secret) {
+        throw new Error("QR_CHECK_IN_SECRET is not configured.");
+    }
+
+    return crypto
+        .createHmac("sha256", secret)
+        .update(payload)
+        .digest("base64url");
+};
+
+const safeSignatureEquals = (left, right) => {
+    const leftBuffer = Buffer.from(left || "");
+    const rightBuffer = Buffer.from(right || "");
+
+    if (leftBuffer.length !== rightBuffer.length) {
+        return false;
+    }
+
+    return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
+export const createCheckInQrToken = (booking) => {
+    if (!booking?._id || !booking?.bookingCode || !booking?.show) {
+        throw new Error("Booking không đủ dữ liệu để tạo QR.");
+    }
+
+    const payload = base64UrlEncode(JSON.stringify({
+        bookingId: booking._id.toString(),
+        bookingCode: booking.bookingCode,
+        showId: booking.show?._id?.toString?.() || booking.show.toString(),
+        userId: booking.user?._id?.toString?.() || booking.user?.toString?.() || `${booking.user || ""}`,
+        iat: Date.now()
+    }));
+    const signature = signQrPayload(payload);
+
+    return `${QR_TOKEN_PREFIX}.${payload}.${signature}`;
+};
+
+export const verifyCheckInQrToken = (token = "") => {
+    const parts = `${token}`.trim().split(".");
+
+    if (parts.length !== 4 || `${parts[0]}.${parts[1]}` !== QR_TOKEN_PREFIX) {
+        throw new Error("QR check-in không hợp lệ.");
+    }
+
+    const [, , payload, signature] = parts;
+    const expectedSignature = signQrPayload(payload);
+
+    if (!safeSignatureEquals(signature, expectedSignature)) {
+        throw new Error("QR check-in không hợp lệ hoặc đã bị thay đổi.");
+    }
+
+    try {
+        return JSON.parse(base64UrlDecode(payload));
+    } catch (error) {
+        throw new Error("QR check-in không đọc được dữ liệu.");
+    }
 };
 
 export const appendBookingHistory = (booking, entry) => {
@@ -233,6 +313,60 @@ export const canCheckInBooking = (booking, showtime) => {
     }
 
     return showtime.status !== "CANCELLED";
+};
+
+export const assertBookingCanCheckIn = (booking, showtime, now = new Date()) => {
+    if (!booking) {
+        throw new Error("Không tìm thấy booking.");
+    }
+
+    if (booking.bookingStatus === BOOKING_STATUS.CHECKED_IN) {
+        throw new Error("Booking này đã được check-in trước đó.");
+    }
+
+    if (!canCheckInBooking(booking, showtime)) {
+        throw new Error("Booking này không đủ điều kiện để check-in.");
+    }
+
+    if (getShowtimeLifecycle(showtime, now) === "ENDED") {
+        throw new Error("Suất chiếu đã kết thúc, không thể check-in.");
+    }
+
+    const showTime = new Date(booking.showDateTime || showtime?.showDateTime);
+    const diffMinutes = (showTime.getTime() - now.getTime()) / (1000 * 60);
+
+    if (!Number.isFinite(diffMinutes)) {
+        throw new Error("Booking thiếu thời gian suất chiếu.");
+    }
+
+    if (diffMinutes > CHECK_IN_EARLY_WINDOW_MINUTES) {
+        throw new Error(`Chỉ có thể check-in trong vòng ${CHECK_IN_EARLY_WINDOW_MINUTES} phút trước giờ chiếu.`);
+    }
+};
+
+export const checkInBooking = async (booking, {
+    checkedInBy,
+    method = "BOOKING_CODE",
+    actor = STATUS_ACTOR.ADMIN
+} = {}) => {
+    assertBookingCanCheckIn(booking, booking?.show);
+
+    booking.checkedInAt = new Date();
+    booking.checkedInBy = checkedInBy || "";
+
+    setBookingStatuses(booking, {
+        bookingStatus: BOOKING_STATUS.CHECKED_IN,
+        paymentStatus: PAYMENT_STATUS.PAID,
+        actor,
+        isPaid: true,
+        note: method === "QR"
+            ? "Check-in bằng QR code tại rạp."
+            : "Check-in bằng mã booking tại quầy."
+    });
+
+    await booking.save();
+
+    return booking;
 };
 
 export const createStripeClient = () => new Stripe(process.env.STRIPE_SECRET_KEY);

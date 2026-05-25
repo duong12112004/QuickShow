@@ -9,10 +9,11 @@ import {
     STATUS_ACTOR,
     cancelBookingAndHandlePayment,
     canAdminCancelBooking,
-    canCheckInBooking,
+    checkInBooking,
     reconcileLegacyBookingState,
     syncBookingPaymentWithStripe,
-    setBookingStatuses
+    setBookingStatuses,
+    verifyCheckInQrToken
 } from "../services/bookingService.js";
 import {
     assertNoShowtimeOverlap,
@@ -1033,42 +1034,11 @@ export const checkInBookingByCode = async (req, res) => {
             return res.json({ success: false, message: "Không tìm thấy booking với mã đã nhập." });
         }
 
-        if (booking.bookingStatus === BOOKING_STATUS.CHECKED_IN) {
-            return res.json({ success: false, message: "Booking này đã được check-in trước đó." });
-        }
-
-        if (!canCheckInBooking(booking, booking.show)) {
-            return res.json({
-                success: false,
-                message: "Booking này không đủ điều kiện để check-in."
-            });
-        }
-
-        const lifecycle = getShowtimeLifecycle(booking.show);
-        if (lifecycle === "ENDED") {
-            return res.json({ success: false, message: "Suất chiếu đã kết thúc, không thể check-in." });
-        }
-
-        const showTime = new Date(booking.showDateTime || booking.show?.showDateTime);
-        const diffMinutes = (showTime.getTime() - Date.now()) / (1000 * 60);
-
-        if (diffMinutes > 120) {
-            return res.json({
-                success: false,
-                message: "Chỉ có thể check-in trong vòng 120 phút trước giờ chiếu."
-            });
-        }
-
-        booking.checkedInAt = new Date();
-        booking.checkedInBy = getAdminUserId(req);
-        setBookingStatuses(booking, {
-            bookingStatus: BOOKING_STATUS.CHECKED_IN,
-            paymentStatus: PAYMENT_STATUS.PAID,
-            actor: STATUS_ACTOR.ADMIN,
-            isPaid: true,
-            note: "Check-in bằng mã booking tại quầy."
+        await checkInBooking(booking, {
+            checkedInBy: getAdminUserId(req),
+            method: "BOOKING_CODE",
+            actor: STATUS_ACTOR.ADMIN
         });
-        await booking.save();
 
         res.json({
             success: true,
@@ -1078,11 +1048,59 @@ export const checkInBookingByCode = async (req, res) => {
                 movieTitle: booking.movieTitle,
                 roomName: booking.roomName,
                 bookedSeats: booking.bookedSeats,
-                userName: booking.user?.name || "Khách hàng"
+                userName: booking.user?.name || "Khách hàng",
+                checkedInAt: booking.checkedInAt
             }
         });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: "Lỗi khi check-in booking: " + error.message });
+    }
+};
+
+export const checkInBookingByQr = async (req, res) => {
+    try {
+        const qrToken = `${req.body?.qrToken || ""}`.trim();
+
+        if (!qrToken) {
+            return res.json({ success: false, message: "Vui lòng quét QR check-in." });
+        }
+
+        const payload = verifyCheckInQrToken(qrToken);
+        const booking = await Booking.findOne({
+            _id: payload.bookingId,
+            bookingCode: payload.bookingCode
+        }).populate("show").populate("user");
+
+        if (!booking) {
+            return res.json({ success: false, message: "Không tìm thấy booking từ QR." });
+        }
+
+        const bookingShowId = booking.show?._id?.toString?.() || booking.show?.toString?.() || "";
+        if (payload.showId !== bookingShowId) {
+            return res.json({ success: false, message: "QR không khớp với suất chiếu của booking." });
+        }
+
+        await checkInBooking(booking, {
+            checkedInBy: getAdminUserId(req),
+            method: "QR",
+            actor: STATUS_ACTOR.ADMIN
+        });
+
+        res.json({
+            success: true,
+            message: "Check-in QR thành công.",
+            booking: {
+                bookingCode: booking.bookingCode,
+                movieTitle: booking.movieTitle,
+                roomName: booking.roomName,
+                bookedSeats: booking.bookedSeats,
+                userName: booking.user?.name || "Khách hàng",
+                checkedInAt: booking.checkedInAt
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: "Lỗi khi check-in QR: " + error.message });
     }
 };

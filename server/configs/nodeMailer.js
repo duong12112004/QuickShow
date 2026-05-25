@@ -15,13 +15,14 @@ const transporter = nodemailer.createTransport({
     socketTimeout: 5000,
   });
 
-  const sendEmail = async ({ to, subject, body }) => {
+  const sendEmail = async ({ to, subject, body, attachments = [] }) => {
     try {
         const response = await transporter.sendMail({
             from: process.env.SENDER_EMAIL,
             to,
             subject,
             html: body,
+            attachments,
         });
         return response;
     } catch (error) {

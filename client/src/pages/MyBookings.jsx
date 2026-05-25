@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { MessageSquareIcon, StarIcon, XIcon } from 'lucide-react';
+import { MessageSquareIcon, QrCodeIcon, StarIcon, XIcon } from 'lucide-react';
 import Loading from '../components/Loading';
 import BlurCircle from '../components/BlurCircle';
 import timeFormat from '../lib/timeFormat';
@@ -25,6 +25,8 @@ const MyBookings = () => {
   const [processingId, setProcessingId] = useState('');
   const [reviewTarget, setReviewTarget] = useState(null);
   const [reviewForm, setReviewForm] = useState(initialReviewForm);
+  const [qrTarget, setQrTarget] = useState(null);
+  const [qrByBookingId, setQrByBookingId] = useState({});
 
   const getMyBookings = async () => {
     try {
@@ -80,6 +82,42 @@ const MyBookings = () => {
 
     setReviewTarget(null);
     setReviewForm(initialReviewForm);
+  };
+
+  const openQrModal = async (booking) => {
+    setQrTarget(booking);
+
+    if (qrByBookingId[booking._id]) {
+      return;
+    }
+
+    try {
+      setProcessingId(booking._id);
+      const { data } = await axios.get(`/api/user/bookings/${booking._id}/qr`, {
+        headers: { Authorization: `Bearer ${await getToken()}` }
+      });
+
+      if (data.success) {
+        setQrByBookingId((current) => ({
+          ...current,
+          [booking._id]: data
+        }));
+      } else {
+        setQrTarget(null);
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      setQrTarget(null);
+      toast.error('Không thể tải QR check-in lúc này.');
+    } finally {
+      setProcessingId('');
+    }
+  };
+
+  const closeQrModal = () => {
+    if (processingId === qrTarget?._id) return;
+    setQrTarget(null);
   };
 
   const handleSubmitReview = async (event) => {
@@ -182,6 +220,7 @@ const MyBookings = () => {
             const paymentStatus = getPaymentStatusUi(item.paymentStatus);
             const canPay = item.bookingStatus === 'PENDING_PAYMENT' && item.paymentStatus === 'UNPAID' && item.paymentLink;
             const canCancel = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID';
+            const canShowQr = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID' && item.isPaid;
             const posterPath = item.show?.movie?.poster_path || item.show?.poster_path;
             const effectiveRefundAmount = item.refundAmount > 0
               ? item.refundAmount
@@ -294,6 +333,18 @@ const MyBookings = () => {
                       </button>
                     )}
 
+                    {canShowQr && (
+                      <button
+                        type='button'
+                        onClick={() => openQrModal(item)}
+                        disabled={processingId === item._id}
+                        className='inline-flex items-center justify-center gap-2 rounded-full border border-emerald-400/40 px-5 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60'
+                      >
+                        <QrCodeIcon className='h-4 w-4' />
+                        {processingId === item._id ? 'Đang tải QR...' : 'Xem QR check-in'}
+                      </button>
+                    )}
+
                     {item.quickShowRating && (
                       <div className='rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary'>
                         <div className='flex items-center gap-2 font-medium'>
@@ -320,7 +371,7 @@ const MyBookings = () => {
                       </button>
                     )}
 
-                    {!canPay && !canCancel && !item.canRateQuickShow && !item.quickShowRating && (
+                    {!canPay && !canCancel && !canShowQr && !item.canRateQuickShow && !item.quickShowRating && (
                       <div className='rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300'>
                         Booking này hiện không có thao tác thêm.
                       </div>
@@ -469,6 +520,55 @@ const MyBookings = () => {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {qrTarget && (
+          <div
+            className='fixed inset-0 z-[130] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm'
+            onMouseDown={closeQrModal}
+          >
+            <div
+              onMouseDown={(event) => event.stopPropagation()}
+              className='w-full max-w-sm rounded-3xl border border-white/10 bg-[#11131c] p-6 text-center shadow-[0_30px_100px_rgba(0,0,0,0.55)]'
+            >
+              <div className='mb-5 flex items-start justify-between gap-4 text-left'>
+                <div>
+                  <p className='text-xs font-medium uppercase tracking-[0.22em] text-primary/80'>QR check-in</p>
+                  <h2 className='mt-2 line-clamp-2 text-xl font-semibold text-white'>
+                    {qrTarget.movieTitle || qrTarget.show?.movie?.title || 'Booking'}
+                  </h2>
+                  <p className='mt-1 text-sm text-gray-400'>{qrTarget.bookingCode}</p>
+                </div>
+                <button
+                  type='button'
+                  onClick={closeQrModal}
+                  disabled={processingId === qrTarget._id}
+                  className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60'
+                  aria-label='Đóng QR check-in'
+                >
+                  <XIcon className='h-5 w-5' />
+                </button>
+              </div>
+
+              {qrByBookingId[qrTarget._id]?.qrDataUrl ? (
+                <div className='rounded-2xl bg-white p-4'>
+                  <img
+                    src={qrByBookingId[qrTarget._id].qrDataUrl}
+                    alt={`QR check-in ${qrTarget.bookingCode}`}
+                    className='mx-auto h-64 w-64'
+                  />
+                </div>
+              ) : (
+                <div className='flex h-72 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-sm text-gray-400'>
+                  Đang tải QR...
+                </div>
+              )}
+
+              <p className='mt-4 text-sm leading-6 text-gray-300'>
+                Đưa QR này cho nhân viên rạp quét khi đến check-in.
+              </p>
+            </div>
           </div>
         )}
       </div>

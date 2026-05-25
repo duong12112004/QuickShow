@@ -4,6 +4,7 @@ import {
     cancelAdminBooking,
     cancelShowtime,
     checkInBookingByCode,
+    checkInBookingByQr,
     createShowtime,
     exportBookingsCsv,
     deleteShowtime,
@@ -37,6 +38,7 @@ adminRouter.delete('/showtimes/:showId', protectAdmin, deleteShowtime);
 adminRouter.get('/bookings/export', protectAdmin, exportBookingsCsv);
 adminRouter.get('/bookings', protectAdmin, getAllBookings);
 adminRouter.post('/bookings/check-in', protectAdmin, checkInBookingByCode);
+adminRouter.post('/bookings/check-in/qr', protectAdmin, checkInBookingByQr);
 adminRouter.patch('/bookings/:bookingId/cancel', protectAdmin, cancelAdminBooking);
 adminRouter.get('/all-bookings', protectAdmin, getAllBookings);
 adminRouter.get('/reviews', protectAdmin, getAdminReviews);

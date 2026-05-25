@@ -1,12 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Ban,
+  ChevronDown,
   ClipboardCopy,
   Download,
   FilterX,
+  ImageUp,
+  QrCode,
   Search,
   TicketCheck,
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import toast from 'react-hot-toast';
 import AdminPagination from '../../components/admin/AdminPagination';
 import Title from '../../components/admin/Title';
@@ -51,12 +55,20 @@ const ListBookings = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [checkInCode, setCheckInCode] = useState('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isQrImageUploadOpen, setIsQrImageUploadOpen] = useState(false);
+  const [isScanningQrImage, setIsScanningQrImage] = useState(false);
+  const [scannerStatus, setScannerStatus] = useState('');
+  const [lastCheckInResult, setLastCheckInResult] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
     q: '',
     bookingStatus: '',
     paymentStatus: ''
   });
+  const qrProcessingRef = useRef(false);
+  const handleQrCheckInRef = useRef(null);
+  const qrFileInputRef = useRef(null);
 
   const getAllBookings = async (nextFilters = filters, options = {}) => {
     const { silent = false } = options;
@@ -165,6 +177,82 @@ const ListBookings = () => {
     }
   };
 
+  const handleQrCheckIn = async (qrToken) => {
+    if (!qrToken || qrProcessingRef.current) return;
+
+    try {
+      qrProcessingRef.current = true;
+      setScannerStatus('Đã đọc QR, đang xác thực booking...');
+      const { data } = await axios.post('/api/admin/bookings/check-in/qr', {
+        qrToken
+      }, {
+        headers: { Authorization: `Bearer ${await getToken()}` }
+      });
+
+      if (data.success) {
+        setLastCheckInResult(data.booking);
+        setScannerStatus('');
+        toast.success(`${data.message} Khách: ${data.booking.userName} | Ghế: ${data.booking.bookedSeats.join(', ')}`);
+        await getAllBookings(filters, { silent: true });
+        setIsScannerOpen(false);
+      } else {
+        setScannerStatus('QR đã đọc nhưng không check-in được. Hãy thử lại hoặc nhập mã booking.');
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      setScannerStatus('Không thể check-in bằng QR. Hãy thử lại hoặc nhập mã booking.');
+      toast.error('Không thể check-in bằng QR.');
+    } finally {
+      qrProcessingRef.current = false;
+    }
+  };
+
+  handleQrCheckInRef.current = handleQrCheckIn;
+
+  const handleQrImageSelect = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    let fileScanner = null;
+
+    try {
+      setIsScanningQrImage(true);
+      setScannerStatus('Đang đọc QR từ ảnh đã chọn...');
+
+      fileScanner = new Html5Qrcode('booking-qr-file-reader');
+      const decodedText = await fileScanner.scanFile(file, true);
+      try {
+        await fileScanner.clear();
+      } catch (clearError) {
+        console.error(clearError);
+      }
+
+      if (!decodedText) {
+        setScannerStatus('Không tìm thấy QR trong ảnh. Hãy chọn ảnh rõ hơn hoặc nhập mã booking.');
+        toast.error('Không tìm thấy QR trong ảnh.');
+        return;
+      }
+
+      await handleQrCheckIn(decodedText);
+    } catch (error) {
+      console.error(error);
+      setScannerStatus('Không đọc được QR từ ảnh. Hãy chọn ảnh rõ nét hơn hoặc nhập mã booking.');
+      toast.error('Không đọc được QR từ ảnh.');
+    } finally {
+      if (fileScanner) {
+        try {
+          await fileScanner.clear();
+        } catch (clearError) {
+          console.error(clearError);
+        }
+      }
+      setIsScanningQrImage(false);
+      event.target.value = '';
+    }
+  };
+
   const handleExport = async () => {
     try {
       setIsExporting(true);
@@ -207,6 +295,58 @@ const ListBookings = () => {
     }
   }, [bookings.length, currentPage]);
 
+  useEffect(() => {
+    if (!isScannerOpen) return undefined;
+
+    const scanner = new Html5Qrcode('booking-qr-reader');
+    let isMounted = true;
+    let noQrTimer = null;
+    setScannerStatus('Đang mở camera...');
+
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      (decodedText) => {
+        if (isMounted) {
+          handleQrCheckInRef.current?.(decodedText);
+        }
+      },
+      () => {}
+    )
+      .then(() => {
+        if (!isMounted) return;
+        setScannerStatus('Đang quét QR. Giữ QR đủ sáng, thẳng góc và cách camera khoảng 15-30 cm.');
+        noQrTimer = window.setTimeout(() => {
+          if (!isMounted || qrProcessingRef.current) return;
+          setScannerStatus('Chưa đọc được QR. Nếu camera mờ, hãy nhập mã booking ở ô bên dưới.');
+          toast('Chưa đọc được QR. Bạn có thể nhập mã booking để check-in.', { icon: 'ⓘ' });
+        }, 30000);
+      })
+      .catch((error) => {
+        console.error(error);
+        setScannerStatus('Không thể mở camera. Hãy kiểm tra quyền camera hoặc nhập mã booking.');
+        toast.error('Không thể mở camera để quét QR.');
+        setIsScannerOpen(false);
+      });
+
+    return () => {
+      isMounted = false;
+      if (noQrTimer) {
+        window.clearTimeout(noQrTimer);
+      }
+      setScannerStatus('');
+      scanner.stop()
+        .then(() => scanner.clear())
+        .catch(() => {
+          try {
+            scanner.clear();
+          } catch (error) {
+            console.error(error);
+          }
+        });
+    };
+  }, [isScannerOpen]);
+
   return (
     <div className='space-y-8'>
       <Title text1='Quản lý' text2='Booking' />
@@ -230,8 +370,8 @@ const ListBookings = () => {
         </div>
       </div>
 
-      <div className='grid gap-6 xl:grid-cols-[2fr_1fr]'>
-        <div className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+      <div className='grid items-start gap-6 xl:grid-cols-[2fr_1fr]'>
+        <div className='self-start rounded-2xl border border-primary/20 bg-primary/8 p-4'>
           <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
             <div>
               <p className='text-lg font-semibold'>Bộ lọc booking</p>
@@ -309,11 +449,70 @@ const ListBookings = () => {
           </div>
         </div>
 
-        <form onSubmit={handleCheckIn} className='rounded-2xl border border-primary/20 bg-primary/8 p-4'>
-          <p className='mb-2 text-lg font-semibold'>Check-in bằng mã booking</p>
+        <form onSubmit={handleCheckIn} className='self-start rounded-2xl border border-primary/20 bg-primary/8 p-4'>
+          <p className='mb-2 text-lg font-semibold'>Check-in vé</p>
           <p className='mb-4 text-sm text-gray-400'>
-            Nhân viên nhập mã booking do khách cung cấp để xác nhận vào rạp.
+            Quét QR từ vé/email của khách hoặc nhập mã booking để xác nhận vào rạp.
           </p>
+          <button
+            type='button'
+            onClick={() => setIsScannerOpen((current) => !current)}
+            className='mb-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-emerald-400/40 px-5 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10'
+          >
+            <QrCode className='h-4 w-4' />
+            {isScannerOpen ? 'Tắt camera quét QR' : 'Mở camera quét QR'}
+          </button>
+
+          <input
+            ref={qrFileInputRef}
+            type='file'
+            accept='image/*'
+            onChange={handleQrImageSelect}
+            className='hidden'
+          />
+          <button
+            type='button'
+            onClick={() => setIsQrImageUploadOpen((current) => !current)}
+            className='mb-3 inline-flex h-9 w-full items-center justify-center rounded-full border border-white/15 text-gray-300 transition hover:bg-white/5 hover:text-white'
+            aria-label={isQrImageUploadOpen ? 'Ẩn chọn ảnh QR' : 'Hiện chọn ảnh QR'}
+            aria-expanded={isQrImageUploadOpen}
+          >
+            <ChevronDown className={`h-4 w-4 transition ${isQrImageUploadOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {isQrImageUploadOpen && (
+            <button
+              type='button'
+              onClick={() => qrFileInputRef.current?.click()}
+              disabled={isScanningQrImage}
+              className='mb-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-sky-400/40 px-5 py-2 text-sm font-medium text-sky-200 transition hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-60'
+            >
+              <ImageUp className='h-4 w-4' />
+              {isScanningQrImage ? 'Đang đọc ảnh QR...' : 'Chọn ảnh QR để Quét'}
+            </button>
+          )}
+          <div id='booking-qr-file-reader' className='hidden' />
+
+          {isScannerOpen && (
+            <div className='mb-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-2'>
+              <div id='booking-qr-reader' className='min-h-64 text-sm text-gray-300' />
+            </div>
+          )}
+
+          {scannerStatus && (
+            <div className='mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm leading-6 text-amber-100'>
+              {scannerStatus}
+            </div>
+          )}
+
+          {lastCheckInResult && (
+            <div className='mb-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100'>
+              <p className='font-medium'>{lastCheckInResult.bookingCode} - {lastCheckInResult.userName}</p>
+              <p className='mt-1 text-emerald-100/80'>
+                {lastCheckInResult.movieTitle} | Ghế: {lastCheckInResult.bookedSeats.join(', ')}
+              </p>
+            </div>
+          )}
+
           <input
             value={checkInCode}
             onChange={(event) => setCheckInCode(event.target.value.toUpperCase())}

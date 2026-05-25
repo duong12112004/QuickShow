@@ -1,4 +1,5 @@
 import { clerkClient } from "@clerk/express";
+import QRCode from "qrcode";
 import Booking from "../models/Booking.js";
 import Movie from "../models/Movie.js";
 import MovieReview from "../models/MovieReview.js";
@@ -10,6 +11,7 @@ import {
     canUserCancelBooking,
     cancelBookingAndHandlePayment,
     confirmBookingPaid,
+    createCheckInQrToken,
     createStripeClient,
     reconcileLegacyBookingState,
     syncBookingPaymentWithStripe
@@ -104,6 +106,39 @@ export const getMyWallet = async (req, res) => {
     } catch (error) {
         console.error(error.message);
         res.json({ success: false, message: "Lỗi khi tải ví QuickShow: " + error.message });
+    }
+};
+
+export const getMyBookingQr = async (req, res) => {
+    try {
+        const userId = ensureAuthenticatedUser(req);
+        const { bookingId } = req.params;
+        const booking = await Booking.findOne({ _id: bookingId, user: userId });
+
+        if (!booking) {
+            return res.json({ success: false, message: "Không tìm thấy booking của bạn." });
+        }
+
+        if (booking.bookingStatus !== BOOKING_STATUS.CONFIRMED || booking.paymentStatus !== PAYMENT_STATUS.PAID || !booking.isPaid) {
+            return res.json({ success: false, message: "Chỉ booking đã thanh toán và đã xác nhận mới có QR check-in." });
+        }
+
+        const qrToken = createCheckInQrToken(booking);
+        const qrDataUrl = await QRCode.toDataURL(qrToken, {
+            width: 280,
+            margin: 1,
+            errorCorrectionLevel: "M"
+        });
+
+        res.json({
+            success: true,
+            qrToken,
+            qrDataUrl,
+            bookingCode: booking.bookingCode
+        });
+    } catch (error) {
+        console.error(error.message);
+        res.json({ success: false, message: "Lỗi khi tạo QR check-in: " + error.message });
     }
 };
 

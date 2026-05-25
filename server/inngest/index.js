@@ -1,4 +1,5 @@
 import { Inngest } from "inngest";
+import QRCode from "qrcode";
 import User from "../models/User.js";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
@@ -8,6 +9,7 @@ import {
     PAYMENT_HOLD_MINUTES,
     PAYMENT_STATUS,
     STATUS_ACTOR,
+    createCheckInQrToken,
     releaseSeats,
     setBookingStatuses
 } from "../services/bookingService.js";
@@ -137,6 +139,14 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                 return;
             }
 
+            const qrToken = createCheckInQrToken(booking);
+            const qrImage = await QRCode.toBuffer(qrToken, {
+                type: "png",
+                width: 260,
+                margin: 1,
+                errorCorrectionLevel: "M"
+            });
+
             await sendEmail({
                 to: booking.user.email,
                 subject: `Xác nhận đặt vé thành công: ${booking.movieTitle}`,
@@ -149,10 +159,20 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                             <p style="margin: 0 0 10px 0;"><strong>Ngày giờ chiếu:</strong> ${new Date(booking.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>
                             <p style="margin: 0;"><strong>Ghế:</strong> ${booking.bookedSeats.join(", ")}</p>
                         </div>
-                        <p>Vui lòng giữ lại mã booking để check-in tại rạp.</p>
+                        <div style="margin: 20px 0; text-align: center;">
+                            <p style="margin: 0 0 12px 0; font-weight: 700;">QR check-in</p>
+                            <img src="cid:booking-check-in-qr" alt="QR check-in ${booking.bookingCode}" width="220" height="220" style="display: inline-block; border: 1px solid #eee; border-radius: 12px; padding: 10px; background: #fff;" />
+                            <p style="margin: 12px 0 0 0; color: #666; font-size: 13px;">Đưa QR này cho nhân viên rạp quét khi đến check-in.</p>
+                        </div>
+                        <p>Vui lòng giữ lại mã booking <strong>${booking.bookingCode}</strong> hoặc QR code để check-in tại rạp.</p>
                         <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
                     </div>
-                `
+                `,
+                attachments: [{
+                    filename: `quickshow-${booking.bookingCode}-qr.png`,
+                    content: qrImage,
+                    cid: "booking-check-in-qr"
+                }]
             });
         });
     }
