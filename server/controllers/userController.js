@@ -231,6 +231,19 @@ export const cancelMyBooking = async (req, res) => {
             io.to(booking.show?._id?.toString() || booking.show.toString()).emit("seats_released", result.releasedSeats);
         }
 
+        try {
+            await inngest.send({
+                name: "app/booking.cancelled",
+                data: {
+                    bookingId: result.booking._id.toString(),
+                    cancelledBy: "USER",
+                    reason: cancelReason
+                }
+            });
+        } catch (emailEventError) {
+            console.error(`[Inngest] Không thể tạo email hủy booking ${result.booking._id}:`, emailEventError.message);
+        }
+
         res.json({
             success: true,
             message: `Đã hủy booking và cộng ${Math.round((result.refundRate || 0) * 100)}% vào ví QuickShow. Phí hủy: ${(result.refundFeeAmount || 0).toLocaleString("vi-VN")} VND.`,

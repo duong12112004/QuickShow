@@ -18,6 +18,45 @@ import { reverseWalletDebit } from "../services/walletService.js";
 
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
 
+const formatEmailDateTime = (value) => (
+    value
+        ? new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
+        : "Chưa có dữ liệu"
+);
+
+const formatEmailMoney = (value, currency = "VND") => `${Number(value || 0).toLocaleString("vi-VN")} ${currency}`;
+
+const getBookingRefundMessage = (booking) => {
+    if (booking.paymentStatus === PAYMENT_STATUS.REFUND_FAILED) {
+        return "Yêu cầu hoàn tiền chưa hoàn tất. QuickShow sẽ kiểm tra và xử lý lại trong thời gian sớm nhất.";
+    }
+
+    if (booking.paymentStatus === PAYMENT_STATUS.REFUND_PENDING) {
+        return `Yêu cầu hoàn tiền đang được xử lý. Số tiền dự kiến hoàn: ${formatEmailMoney(booking.refundAmount, booking.currency)}.`;
+    }
+
+    if (booking.paymentStatus === PAYMENT_STATUS.REFUNDED || booking.refundAmount > 0) {
+        const refundRate = booking.refundRate ? ` (${Math.round(booking.refundRate * 100)}%)` : "";
+        const feeText = booking.refundFeeAmount > 0
+            ? ` Phí hủy: ${formatEmailMoney(booking.refundFeeAmount, booking.currency)}.`
+            : "";
+
+        return `Đã hoàn ${formatEmailMoney(booking.refundAmount, booking.currency)}${refundRate} vào ví QuickShow.${feeText}`;
+    }
+
+    return "Booking này chưa phát sinh hoàn tiền.";
+};
+
+const renderBookingSummary = (booking) => `
+    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0 0 10px 0;"><strong>Mã booking:</strong> ${booking.bookingCode}</p>
+        <p style="margin: 0 0 10px 0;"><strong>Phim:</strong> ${booking.movieTitle}</p>
+        <p style="margin: 0 0 10px 0;"><strong>Phòng chiếu:</strong> ${booking.roomName}</p>
+        <p style="margin: 0 0 10px 0;"><strong>Ngày giờ chiếu:</strong> ${formatEmailDateTime(booking.showDateTime)}</p>
+        <p style="margin: 0;"><strong>Ghế:</strong> ${(booking.bookedSeats || []).join(", ")}</p>
+    </div>
+`;
+
 const syncUserCreation = inngest.createFunction(
     {
         id: "sync-user-from-clerk",
@@ -178,6 +217,82 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     }
 );
 
+const sendBookingCancellationEmail = inngest.createFunction(
+    {
+        id: "send-booking-cancellation-email",
+        triggers: { event: "app/booking.cancelled" }
+    },
+    async ({ event, step }) => {
+        await step.run("fetch-booking-and-send-cancellation-email", async () => {
+            const booking = await Booking.findById(event.data.bookingId).populate("user");
+
+            if (!booking || !booking.user?.email) {
+                return;
+            }
+
+            const cancelledBy = event.data.cancelledBy || booking.cancelledBy || "";
+            const actorLabel = cancelledBy === "USER"
+                ? "theo yêu cầu của bạn"
+                : "bởi quản trị viên QuickShow";
+            const reason = event.data.reason || booking.cancelReason || "Không có lý do cụ thể.";
+
+            await sendEmail({
+                to: booking.user.email,
+                subject: `Thông báo hủy booking: ${booking.bookingCode}`,
+                body: `
+                    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
+                        <h2>Xin chào ${booking.user.name},</h2>
+                        <p>Booking <strong>${booking.bookingCode}</strong> đã được hủy ${actorLabel}.</p>
+                        ${renderBookingSummary(booking)}
+                        <div style="background-color: #fff6e5; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f1c56c;">
+                            <p style="margin: 0 0 10px 0;"><strong>Lý do hủy:</strong> ${reason}</p>
+                            <p style="margin: 0;"><strong>Hoàn tiền:</strong> ${getBookingRefundMessage(booking)}</p>
+                        </div>
+                        <p>Bạn có thể kiểm tra ví QuickShow và lịch sử booking trong tài khoản của mình.</p>
+                        <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
+                    </div>
+                `
+            });
+        });
+    }
+);
+
+const sendShowtimeCancellationEmail = inngest.createFunction(
+    {
+        id: "send-showtime-cancellation-email",
+        triggers: { event: "app/show.cancelled.booking" }
+    },
+    async ({ event, step }) => {
+        await step.run("fetch-booking-and-send-showtime-cancellation-email", async () => {
+            const booking = await Booking.findById(event.data.bookingId).populate("user");
+
+            if (!booking || !booking.user?.email) {
+                return;
+            }
+
+            const reason = event.data.cancellationReason || booking.cancelReason || "Không có lý do cụ thể.";
+
+            await sendEmail({
+                to: booking.user.email,
+                subject: `Suất chiếu đã bị hủy: ${booking.movieTitle}`,
+                body: `
+                    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
+                        <h2>Xin chào ${booking.user.name},</h2>
+                        <p>QuickShow rất tiếc phải thông báo suất chiếu của phim <strong style="color: #F84565;">${booking.movieTitle}</strong> đã bị hủy.</p>
+                        ${renderBookingSummary(booking)}
+                        <div style="background-color: #fff6e5; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f1c56c;">
+                            <p style="margin: 0 0 10px 0;"><strong>Lý do hủy suất chiếu:</strong> ${reason}</p>
+                            <p style="margin: 0;"><strong>Trạng thái booking/hoàn tiền:</strong> ${getBookingRefundMessage(booking)}</p>
+                        </div>
+                        <p>Nếu booking đã thanh toán, tiền hoàn sẽ được cộng vào ví QuickShow theo chính sách của hệ thống.</p>
+                        <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
+                    </div>
+                `
+            });
+        });
+    }
+);
+
 const sendShowReminders = inngest.createFunction(
     {
         id: "send-show-reminders",
@@ -306,6 +421,8 @@ export const functions = [
     syncUserUpdation,
     expireUnpaidBookings,
     sendBookingConfirmationEmail,
+    sendBookingCancellationEmail,
+    sendShowtimeCancellationEmail,
     sendShowReminders,
     markNoShowBookings,
     sendNewShowNotifications

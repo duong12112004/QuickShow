@@ -555,8 +555,7 @@ const ManageShowtimes = () => {
 
               const canCancel =
                 showtime.status === 'SCHEDULED' &&
-                showtime.lifecycle !== 'ENDED' &&
-                !showtime.hasSales
+                showtime.lifecycle !== 'ENDED'
 
               const canDelete =
                 (showtime.lifecycle === 'UPCOMING' || showtime.lifecycle === 'CANCELLED') &&
@@ -991,6 +990,19 @@ const ManageShowtimes = () => {
             </div>
 
             <div className='mt-5'>
+              {(cancelTarget.hasSales || cancelTarget.heldSeatCount > 0 || cancelTarget.lifecycle === 'IN_PROGRESS') && (
+                <div className='mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-100'>
+                  {cancelTarget.hasSales && (
+                    <p>Suất chiếu này đã bán {cancelTarget.soldSeatCount} ghế. Khi hủy, hệ thống sẽ hủy booking và hoàn tiền theo chính sách hiện tại.</p>
+                  )}
+                  {cancelTarget.heldSeatCount > 0 && (
+                    <p>Đang có {cancelTarget.heldSeatCount} ghế được giữ chỗ. Khi hủy, các ghế này sẽ được nhả.</p>
+                  )}
+                  {cancelTarget.lifecycle === 'IN_PROGRESS' && (
+                    <p>Suất chiếu đang diễn ra. Hãy kiểm tra vận hành rạp trước khi xác nhận hủy.</p>
+                  )}
+                </div>
+              )}
               <label className='mb-2 block text-sm text-gray-300'>Lý do hủy</label>
               <textarea
                 rows={4}

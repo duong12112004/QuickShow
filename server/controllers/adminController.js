@@ -876,6 +876,19 @@ export const cancelShowtime = async (req, res) => {
             } catch (error) {
                 failedRefundCount += 1;
             }
+
+            try {
+                await inngest.send({
+                    name: "app/show.cancelled.booking",
+                    data: {
+                        bookingId: booking._id.toString(),
+                        showtimeId: showtime._id.toString(),
+                        cancellationReason
+                    }
+                });
+            } catch (emailEventError) {
+                console.error(`[Inngest] Không thể tạo email hủy suất chiếu cho booking ${booking._id}:`, emailEventError.message);
+            }
         }
 
         emitSeatsReleased(req, showtime._id, [...new Set(releasedSeats)]);
@@ -1001,6 +1014,19 @@ export const cancelAdminBooking = async (req, res) => {
         });
 
         emitSeatsReleased(req, booking.show?._id || booking.show, result.releasedSeats || []);
+
+        try {
+            await inngest.send({
+                name: "app/booking.cancelled",
+                data: {
+                    bookingId: result.booking._id.toString(),
+                    cancelledBy: "ADMIN",
+                    reason: cancelReason
+                }
+            });
+        } catch (emailEventError) {
+            console.error(`[Inngest] Không thể tạo email hủy booking ${result.booking._id}:`, emailEventError.message);
+        }
 
         res.json({
             success: true,
