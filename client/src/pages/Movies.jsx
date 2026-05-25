@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react'
-import { ChevronDownIcon, FilterIcon, XIcon } from 'lucide-react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { FilterIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import MovieCard from '../components/MovieCard'
 import BlurCircle from '../components/BlurCircle'
+import AdminPagination from '../components/admin/AdminPagination'
 import { useAppContext } from '../context/AppContext'
 import { getMovieGenres, getMovieTitle } from '../lib/movieDisplay'
 import { searchMovies } from '../lib/movieSearch'
@@ -36,6 +37,13 @@ const sortOptions = [
   { value: 'NEWEST', label: 'Mới phát hành' },
   { value: 'RUNTIME', label: 'Thời lượng ngắn nhất' }
 ]
+
+const getResponsivePageSize = () => {
+  if (typeof window === 'undefined') return 10
+  if (window.innerWidth >= 1024) return 10
+  if (window.innerWidth >= 640) return 8
+  return 6
+}
 
 const getMovieYear = (movie) => {
   if (!movie?.release_date) {
@@ -97,8 +105,10 @@ const sortMovies = (movies, sort) => {
 const Movies = () => {
   const { shows } = useAppContext()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(getResponsivePageSize)
   const query = searchParams.get('q') || ''
 
   const filterOptions = useMemo(() => {
@@ -138,16 +148,44 @@ const Movies = () => {
     return sortMovies(nextMovies, filters.sort)
   }, [shows, query, filters])
 
+  const totalPages = Math.max(1, Math.ceil(filteredMovies.length / pageSize))
+  const effectivePage = Math.min(currentPage, totalPages)
+  const paginatedMovies = useMemo(() => {
+    const startIndex = (effectivePage - 1) * pageSize
+    return filteredMovies.slice(startIndex, startIndex + pageSize)
+  }, [filteredMovies, effectivePage, pageSize])
+  const startRow = filteredMovies.length === 0 ? 0 : (effectivePage - 1) * pageSize + 1
+  const endRow = Math.min(effectivePage * pageSize, filteredMovies.length)
+
   const updateFilter = (name, value) => {
     setFilters((currentFilters) => ({ ...currentFilters, [name]: value }))
+    setCurrentPage(1)
+  }
+
+  const updateSearch = (value) => {
+    const nextValue = value.trimStart()
+    if (nextValue) {
+      setSearchParams({ q: nextValue })
+    } else {
+      setSearchParams({})
+    }
+    setCurrentPage(1)
   }
 
   const clearSearch = () => {
     setSearchParams({})
+    setCurrentPage(1)
   }
 
   const clearFilters = () => {
     setFilters(DEFAULT_FILTERS)
+    setCurrentPage(1)
+  }
+
+  const clearAll = () => {
+    clearSearch()
+    setFilters(DEFAULT_FILTERS)
+    setCurrentPage(1)
   }
 
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
@@ -156,15 +194,27 @@ const Movies = () => {
   const hasMovies = shows.length > 0
   const hasQuery = query.trim().length > 0
   const hasActiveFilters = activeFilterCount > 0
+  const hasAnyFilter = hasQuery || hasActiveFilters
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPageSize(getResponsivePageSize())
+      setCurrentPage(1)
+    }
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   return (
-    <div className='relative my-40 mb-60 min-h-[80vh] px-6 md:px-16 lg:px-40 xl:px-44'>
+    <div className='relative my-40 mb-60 min-h-[80vh] px-6 md:px-12 lg:px-16 xl:px-24 2xl:px-44'>
       <BlurCircle top='150px' left='0px' />
       <BlurCircle bottom='50px' right='50px' />
 
-      <div className='mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between'>
+      <div className='mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between'>
         <div>
-          <h1 className='text-xl font-semibold text-white'>
+          <h1 className='text-2xl font-semibold text-white'>
             {hasQuery ? `Kết quả tìm kiếm cho "${query}"` : 'Phim đang chiếu'}
           </h1>
           <p className='mt-2 text-sm text-gray-400'>
@@ -175,14 +225,14 @@ const Movies = () => {
         </div>
 
         <div className='flex flex-wrap gap-3'>
-          {hasQuery && (
+          {hasAnyFilter && (
             <button
               type='button'
-              onClick={clearSearch}
-              className='inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-5 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/15'
+              onClick={clearAll}
+              className='inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-gray-200 transition hover:border-primary/30 hover:text-white'
             >
               <XIcon className='h-4 w-4' />
-              Xóa tìm kiếm
+              Xóa tất cả
             </button>
           )}
 
@@ -190,108 +240,138 @@ const Movies = () => {
             type='button'
             onClick={() => setIsFilterOpen((current) => !current)}
             className='inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:border-primary/30 hover:bg-primary/10'
+            aria-expanded={isFilterOpen}
           >
             <FilterIcon className='h-4 w-4 text-primary' />
             Bộ lọc
             {activeFilterCount > 0 && (
               <span className='rounded-full bg-primary px-2 py-0.5 text-xs text-white'>{activeFilterCount}</span>
             )}
-            <ChevronDownIcon className={`h-4 w-4 transition ${isFilterOpen ? 'rotate-180' : ''}`} />
+            <SlidersHorizontalIcon className={`h-4 w-4 transition ${isFilterOpen ? 'rotate-180' : ''}`} />
           </button>
         </div>
       </div>
 
-      {isFilterOpen && (
-        <div className='mb-8 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 backdrop-blur sm:p-5'>
-          <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
-            <label className='space-y-2'>
-              <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Sắp xếp</span>
-              <select
-                value={filters.sort}
-                onChange={(event) => updateFilter('sort', event.target.value)}
-                className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 text-sm text-white outline-none transition focus:border-primary/50'
-              >
-                {sortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+      {isFilterOpen && <div className='mb-8 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 backdrop-blur sm:p-5'>
+        <div className='mb-5 flex items-center gap-3'>
+          <div className='flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15 text-primary'>
+            <SlidersHorizontalIcon className='h-5 w-5' />
+          </div>
+          <div>
+            <p className='text-base font-semibold text-white'>Lọc danh sách phim</p>
+            <p className='text-sm text-gray-400'>Tinh chỉnh theo nhu cầu xem phim và đặt vé.</p>
+          </div>
+        </div>
 
-            <label className='space-y-2'>
-              <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Thể loại</span>
-              <select
-                value={filters.genre}
-                onChange={(event) => updateFilter('genre', event.target.value)}
-                className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 text-sm text-white outline-none transition focus:border-primary/50'
-              >
-                <option value='ALL'>Tất cả thể loại</option>
-                {filterOptions.genres.map((genre) => (
-                  <option key={genre} value={genre}>{genre}</option>
-                ))}
-              </select>
-            </label>
+        <div className='grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,1fr))]'>
+          <label className='space-y-2'>
+            <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Tìm kiếm</span>
+            <span className='relative block'>
+              <SearchIcon className='pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500' />
+              <input
+                value={query}
+                onChange={(event) => updateSearch(event.target.value)}
+                placeholder='Tên phim, diễn viên, đạo diễn'
+                className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 pl-11 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-primary/50'
+              />
+            </span>
+          </label>
 
-            <label className='space-y-2'>
-              <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Năm phát hành</span>
-              <select
-                value={filters.year}
-                onChange={(event) => updateFilter('year', event.target.value)}
-                className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 text-sm text-white outline-none transition focus:border-primary/50'
-              >
-                <option value='ALL'>Tất cả năm</option>
-                {filterOptions.years.map((year) => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </label>
+          <label className='space-y-2'>
+            <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Sắp xếp</span>
+            <select
+              value={filters.sort}
+              onChange={(event) => updateFilter('sort', event.target.value)}
+              className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 text-sm text-white outline-none transition focus:border-primary/50'
+            >
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
 
-            <div className='space-y-2'>
-              <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Điểm đánh giá</span>
-              <div className='grid grid-cols-2 gap-2'>
-                {ratingOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type='button'
-                    onClick={() => updateFilter('rating', option.value)}
-                    className={`h-11 rounded-xl border px-3 text-sm transition ${
-                      filters.rating === option.value
-                        ? 'border-primary/40 bg-primary/15 text-primary'
-                        : 'border-white/10 bg-black/10 text-gray-300 hover:border-primary/30 hover:text-white'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+          <label className='space-y-2'>
+            <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Thể loại</span>
+            <select
+              value={filters.genre}
+              onChange={(event) => updateFilter('genre', event.target.value)}
+              className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 text-sm text-white outline-none transition focus:border-primary/50'
+            >
+              <option value='ALL'>Tất cả thể loại</option>
+              {filterOptions.genres.map((genre) => (
+                <option key={genre} value={genre}>{genre}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className='space-y-2'>
+            <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Năm phát hành</span>
+            <select
+              value={filters.year}
+              onChange={(event) => updateFilter('year', event.target.value)}
+              className='h-11 w-full rounded-xl border border-white/10 bg-[#14151d] px-3 text-sm text-white outline-none transition focus:border-primary/50'
+            >
+              <option value='ALL'>Tất cả năm</option>
+              {filterOptions.years.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className='mt-5 grid gap-5 xl:grid-cols-[1.2fr_1fr_auto] xl:items-end'>
+          <div className='space-y-2'>
+            <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Thời lượng</span>
+            <div className='flex flex-wrap gap-2'>
+              {durationOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type='button'
+                  onClick={() => updateFilter('duration', option.value)}
+                  className={`rounded-full border px-4 py-2 text-sm transition ${
+                    filters.duration === option.value
+                      ? 'border-primary/40 bg-primary/15 text-primary'
+                      : 'border-white/10 bg-black/10 text-gray-300 hover:border-primary/30 hover:text-white'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className='mt-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between'>
-            <div className='space-y-2'>
-              <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Thời lượng</span>
-              <div className='flex flex-wrap gap-2'>
-                {durationOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type='button'
-                    onClick={() => updateFilter('duration', option.value)}
-                    className={`rounded-full border px-4 py-2 text-sm transition ${
-                      filters.duration === option.value
-                        ? 'border-primary/40 bg-primary/15 text-primary'
-                        : 'border-white/10 bg-black/10 text-gray-300 hover:border-primary/30 hover:text-white'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+          <div className='space-y-2'>
+            <span className='text-xs font-medium uppercase tracking-[0.18em] text-gray-500'>Điểm đánh giá</span>
+            <div className='grid grid-cols-2 gap-2 sm:flex sm:flex-wrap'>
+              {ratingOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type='button'
+                  onClick={() => updateFilter('rating', option.value)}
+                  className={`rounded-full border px-4 py-2 text-sm transition ${
+                    filters.rating === option.value
+                      ? 'border-primary/40 bg-primary/15 text-primary'
+                      : 'border-white/10 bg-black/10 text-gray-300 hover:border-primary/30 hover:text-white'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
+          </div>
 
+          <div className='flex flex-col gap-2 text-sm text-gray-400 xl:items-end'>
+            <div className='inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/15 px-4 py-2'>
+              <FilterIcon className='h-4 w-4 text-primary' />
+              {filteredMovies.length > 0
+                ? `${startRow}-${endRow} / ${filteredMovies.length} phim`
+                : '0 phim phù hợp'}
+            </div>
             {hasActiveFilters && (
               <button
                 type='button'
                 onClick={clearFilters}
-                className='inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-sm font-medium text-gray-300 transition hover:border-primary/30 hover:text-white'
+                className='inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-gray-300 transition hover:border-primary/30 hover:text-white'
               >
                 <XIcon className='h-4 w-4' />
                 Xóa bộ lọc
@@ -299,18 +379,29 @@ const Movies = () => {
             )}
           </div>
         </div>
-      )}
+      </div>}
 
       {!hasMovies ? (
         <div className='flex min-h-[45vh] flex-col items-center justify-center text-center'>
           <h2 className='text-3xl font-bold text-gray-400'>Hiện tại chưa có suất chiếu nào</h2>
         </div>
       ) : filteredMovies.length > 0 ? (
-        <div className='flex flex-wrap gap-8 max-sm:justify-center'>
-          {filteredMovies.map((movie) => (
+        <>
+          <div className='grid grid-cols-1 justify-items-center gap-6 sm:grid-cols-2 lg:grid-cols-5'>
+          {paginatedMovies.map((movie) => (
             <MovieCard movie={movie} key={movie._id} />
           ))}
-        </div>
+          </div>
+
+          <div className='mt-12'>
+            <AdminPagination
+              currentPage={effectivePage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              disabled={filteredMovies.length === 0}
+            />
+          </div>
+        </>
       ) : (
         <div className='flex min-h-[45vh] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-white/4 px-6 text-center'>
           <h2 className='text-2xl font-semibold text-white'>Không tìm thấy phim phù hợp</h2>

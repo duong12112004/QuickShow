@@ -376,7 +376,7 @@ const ManageReviews = () => {
                         </div>
                       )}
                       <div className='min-w-0'>
-                        <p className='line-clamp-2 break-words font-medium text-white'>{review.userName || 'Người dùng QuickShow'}</p>
+                        <p className='line-clamp-2 wrap-break-word font-medium text-white'>{review.userName || 'Người dùng QuickShow'}</p>
                         <p className='mt-1 text-xs text-gray-400'>{getReviewType(review)}</p>
                         {review.isVerifiedViewer && (
                           <p className='mt-1 inline-flex items-center gap-1 text-xs text-emerald-300'>
@@ -411,7 +411,7 @@ const ManageReviews = () => {
 
                   <td className='p-3'>
                     {review.comment?.trim() ? (
-                      <p className='line-clamp-5 max-w-[420px] whitespace-pre-line break-words text-gray-300'>
+                      <p className='line-clamp-5 max-w-[420px] whitespace-pre-line wrap-break-word text-gray-300'>
                         {review.comment}
                       </p>
                     ) : (

@@ -1,14 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { MessageSquareIcon, QrCodeIcon, StarIcon, XIcon } from 'lucide-react';
+import { FilterXIcon, MessageSquareIcon, QrCodeIcon, SearchIcon, StarIcon, XIcon } from 'lucide-react';
 import Loading from '../components/Loading';
 import BlurCircle from '../components/BlurCircle';
+import AdminPagination from '../components/admin/AdminPagination';
 import timeFormat from '../lib/timeFormat';
 import { dateFormat } from '../lib/dateFormat';
 import { useAppContext } from '../context/AppContext';
 import { getBookingStatusUi, getPaymentStatusUi } from '../lib/bookingStatus';
 
 const MAX_REVIEW_COMMENT_LENGTH = 1500;
+const PAGE_SIZE = 4;
+
+const bookingStatusOptions = [
+  { value: '', label: 'Tất cả trạng thái vé' },
+  { value: 'PENDING_PAYMENT', label: 'Chờ thanh toán' },
+  { value: 'CONFIRMED', label: 'Đã xác nhận' },
+  { value: 'CHECKED_IN', label: 'Đã check-in' },
+  { value: 'CANCELLED', label: 'Đã hủy' },
+  { value: 'PAYMENT_EXPIRED', label: 'Hết hạn thanh toán' },
+  { value: 'REFUND_PENDING', label: 'Đang hoàn tiền' },
+  { value: 'REFUNDED', label: 'Đã hoàn tiền' },
+  { value: 'NO_SHOW', label: 'Không đến xem' }
+];
+
+const paymentStatusOptions = [
+  { value: '', label: 'Tất cả thanh toán' },
+  { value: 'UNPAID', label: 'Chưa thanh toán' },
+  { value: 'PAID', label: 'Đã thanh toán' },
+  { value: 'EXPIRED', label: 'Đã hết hạn' },
+  { value: 'REFUND_PENDING', label: 'Đang hoàn tiền' },
+  { value: 'REFUNDED', label: 'Đã hoàn tiền' },
+  { value: 'REFUND_FAILED', label: 'Hoàn tiền thất bại' }
+];
+
+const darkInputClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-primary/60';
+const darkSelectClassName = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition focus:border-primary/60';
+const darkOptionClassName = 'bg-slate-950 text-white';
 
 const initialReviewForm = {
   rating: 0,
@@ -27,6 +55,12 @@ const MyBookings = () => {
   const [reviewForm, setReviewForm] = useState(initialReviewForm);
   const [qrTarget, setQrTarget] = useState(null);
   const [qrByBookingId, setQrByBookingId] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filters, setFilters] = useState({
+    q: '',
+    bookingStatus: '',
+    paymentStatus: ''
+  });
 
   const getMyBookings = async () => {
     try {
@@ -171,6 +205,61 @@ const MyBookings = () => {
     }
   }, [user]);
 
+  const filteredBookings = useMemo(() => {
+    const normalizedQuery = filters.q.trim().toLowerCase();
+
+    return bookings.filter((booking) => {
+      if (filters.bookingStatus && booking.bookingStatus !== filters.bookingStatus) {
+        return false;
+      }
+
+      if (filters.paymentStatus && booking.paymentStatus !== filters.paymentStatus) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const haystack = [
+        booking.bookingCode,
+        booking.movieTitle || booking.show?.movie?.title,
+        booking.roomName || booking.show?.room?.name,
+        booking.bookedSeats?.join(' ')
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [bookings, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
+  const paginatedBookings = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredBookings.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredBookings, currentPage]);
+  const startRow = filteredBookings.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const endRow = Math.min(currentPage * PAGE_SIZE, filteredBookings.length);
+
+  const handleFilterChange = (key, value) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+    setCurrentPage(1);
+  };
+
+  const resetFilters = () => {
+    setFilters({ q: '', bookingStatus: '', paymentStatus: '' });
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    const nextTotalPages = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
+    if (currentPage > nextTotalPages) {
+      setCurrentPage(nextTotalPages);
+    }
+  }, [filteredBookings.length, currentPage]);
+
   if (isLoading) {
     return <Loading />;
   }
@@ -211,8 +300,71 @@ const MyBookings = () => {
           </div>
         )}
 
+        {bookings.length > 0 && (
+          <div className='mb-6 rounded-2xl border border-primary/20 bg-primary/8 p-5'>
+            <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
+              <div>
+                <p className='text-lg font-semibold text-white'>Bộ lọc booking</p>
+                <p className='mt-1 text-sm text-gray-400'>
+                  Tìm theo mã booking, phim, phòng hoặc ghế. Mỗi trang hiển thị {PAGE_SIZE} booking.
+                </p>
+              </div>
+              <button
+                type='button'
+                onClick={resetFilters}
+                className='inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/5'
+              >
+                <FilterXIcon className='h-4 w-4' />
+                Đặt lại
+              </button>
+            </div>
+
+            <div className='mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]'>
+              <label className='relative block'>
+                <SearchIcon className='pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500' />
+                <input
+                  value={filters.q}
+                  onChange={(event) => handleFilterChange('q', event.target.value)}
+                  placeholder='Tìm mã booking, phim, phòng, ghế'
+                  className={`${darkInputClassName} pl-11`}
+                />
+              </label>
+
+              <select
+                value={filters.bookingStatus}
+                onChange={(event) => handleFilterChange('bookingStatus', event.target.value)}
+                className={darkSelectClassName}
+              >
+                {bookingStatusOptions.map((option) => (
+                  <option key={option.value || 'all-booking'} value={option.value} className={darkOptionClassName}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.paymentStatus}
+                onChange={(event) => handleFilterChange('paymentStatus', event.target.value)}
+                className={darkSelectClassName}
+              >
+                {paymentStatusOptions.map((option) => (
+                  <option key={option.value || 'all-payment'} value={option.value} className={darkOptionClassName}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className='mt-4 text-xs text-gray-400'>
+              {filteredBookings.length > 0
+                ? `Đang hiển thị ${startRow}-${endRow} trên tổng ${filteredBookings.length} booking phù hợp`
+                : 'Không có booking phù hợp với bộ lọc hiện tại'}
+            </div>
+          </div>
+        )}
+
         <div className='space-y-5 pb-10'>
-          {bookings.map((item) => {
+          {paginatedBookings.map((item) => {
             const movieTitle = item.movieTitle || item.show?.movie?.title || 'Phim không xác định';
             const roomName = item.roomName || item.show?.room?.name || 'Chưa có dữ liệu';
             const showDateTime = item.showDateTime || item.show?.showDateTime;
@@ -386,6 +538,23 @@ const MyBookings = () => {
             );
           })}
         </div>
+
+        {bookings.length > 0 && filteredBookings.length === 0 && (
+          <div className='mb-10 rounded-2xl border border-primary/20 bg-primary/8 p-6 text-sm text-gray-300'>
+            Không có booking nào phù hợp với bộ lọc hiện tại.
+          </div>
+        )}
+
+        {bookings.length > 0 && (
+          <div className='pb-10'>
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              disabled={filteredBookings.length === 0}
+            />
+          </div>
+        )}
 
         {reviewTarget && (
           <div
