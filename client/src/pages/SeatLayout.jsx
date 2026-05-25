@@ -1,13 +1,28 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import Loading from '../components/Loading'
-import { ArrowRightIcon, ClockIcon } from 'lucide-react'
+import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, InfoIcon, MapPinIcon, TicketIcon, WalletIcon } from 'lucide-react'
 import isoTimeFormat from '../lib/isoTimeFormat'
+import timeFormat from '../lib/timeFormat'
 import toast from 'react-hot-toast'
 import BlurCircle from '../components/BlurCircle'
 import { useAppContext } from '../context/AppContext'
 import { socket } from '../configs/socket';
+
+const getSeatUnitPrice = (seatType, basePrice) => {
+  if (seatType === 'VIP') return basePrice + 20000
+  if (seatType === 'COUPLE') return basePrice * 2
+  return basePrice
+}
+
+const getSeatTypeLabel = (seatType) => {
+  if (seatType === 'VIP') return 'VIP'
+  if (seatType === 'COUPLE') return 'Ghế đôi'
+  return 'Tiêu chuẩn'
+}
+
+const formatMoney = (value, currency) => `${Number(value || 0).toLocaleString()} ${currency}`
 
 // Component hiển thị sơ đồ ghế ngồi và xử lý luồng đặt vé Real-time
 const SeatLayout = () => {
@@ -173,16 +188,73 @@ const SeatLayout = () => {
           if (s.seatNumber === seatNum) sType = s.seatType;
         });
       });
-      if (sType === 'VIP') total += (basePrice + 20000);
-      else if (sType === 'COUPLE') total += (basePrice * 2);
-      else total += basePrice;
+      total += getSeatUnitPrice(sType, basePrice);
     });
     return total;
   };
 
+  const seatCatalog = useMemo(() => {
+    const catalog = new Map()
+    seatMap.forEach((rowObj) => {
+      rowObj.seats?.forEach((seat) => {
+        if (seat.seatType !== 'EMPTY') {
+          catalog.set(seat.seatNumber, seat)
+        }
+      })
+    })
+    return catalog
+  }, [seatMap])
+
+  const selectedSeatDetails = useMemo(() => (
+    selectedSeats.map((seatNumber) => {
+      const seat = seatCatalog.get(seatNumber)
+      const seatType = seat?.seatType || 'STANDARD'
+      return {
+        seatNumber,
+        seatType,
+        label: getSeatTypeLabel(seatType),
+        unitPrice: getSeatUnitPrice(seatType, basePrice)
+      }
+    })
+  ), [selectedSeats, seatCatalog, basePrice])
+
+  const seatStats = useMemo(() => {
+    let capacity = 0
+    let standard = 0
+    let vip = 0
+    let couple = 0
+
+    seatMap.forEach((rowObj) => {
+      rowObj.seats?.forEach((seat) => {
+        if (seat.seatType === 'EMPTY') return
+        capacity += 1
+        if (seat.seatType === 'VIP') vip += 1
+        else if (seat.seatType === 'COUPLE') couple += 1
+        else standard += 1
+      })
+    })
+
+    const sold = occupiedSeats.length
+    const held = heldSeats.length
+    return {
+      capacity,
+      standard,
+      vip,
+      couple,
+      sold,
+      held,
+      available: Math.max(capacity - sold - held, 0)
+    }
+  }, [seatMap, occupiedSeats.length, heldSeats.length])
+
   const totalPrice = calculateTotalPrice()
   const walletAmountUsed = useWallet ? Math.min(walletBalance, totalPrice) : 0
   const stripeAmount = Math.max(totalPrice - walletAmountUsed, 0)
+  const movie = show?.movie
+  const movieTitle = movie?.title || movie?.original_title || 'Phim đang chiếu'
+  const selectedShowDate = selectedTime?.time
+    ? new Date(selectedTime.time).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
+    : ''
 
   useEffect(() => {
     getShow()
@@ -254,114 +326,209 @@ const SeatLayout = () => {
       </div>
 
       {/* Cột phải: Sơ đồ ghế ngồi */}
-      <div className='relative flex-1 flex flex-col items-center max-md:mt-16'>
+      <div className='relative flex-1 max-md:mt-16 md:ml-8'>
         <BlurCircle top='-100px' left='-100px' />
         <BlurCircle bottom='0' right='0' />
 
-        {roomData && (
-          <div className='text-center mb-4'>
-            <p className='text-primary text-lg font-semibold'>{roomData.roomName}</p>
-          </div>
-        )}
-
-        <img src={assets.screenImage} alt="Màn hình chiếu" className='mt-2' />
-        <p className='text-gray-400 text-sm mb-6 mt-2 tracking-[0.3em]'>MÀN HÌNH</p>
-
-        <div className='flex flex-col items-center mt-8 text-xs text-gray-300 w-full overflow-x-auto pb-10'>
-          {seatMap?.map((rowObj, index) => {
-            if (rowObj.seats.length === 0) return <div key={rowObj.row} className="h-3 md:h-6 w-full"></div>; 
-            return (
-              <div key={rowObj.row} className='flex gap-2 mt-3 items-center justify-center w-full min-w-max'>
-                <div className='w-6 text-center font-bold text-gray-500 mr-2 md:mr-4'>{rowObj.row}</div>
-                <div className='flex items-center justify-center gap-2 md:gap-3'>
-                  {rowObj.seats.map((seat) => {
-                    if (seat.seatType === 'EMPTY') return <div key={seat.seatNumber} className='w-6 md:w-8 h-8'></div>;
-
-                    let styleClass = 'border-primary/60 hover:bg-primary/20 text-white'; 
-                    let widthClass = 'w-8 h-8 md:w-10 md:h-10';
-
-                    if (seat.seatType === 'VIP') {
-                      styleClass = 'border-yellow-500 hover:bg-yellow-500/20 text-white';
-                    } else if (seat.seatType === 'COUPLE') {
-                      styleClass = 'border-pink-500 hover:bg-pink-500/20 text-white';
-                      widthClass = 'w-16 h-8 md:w-18 md:h-10'; 
-                    }
-
-                    const isSelected = selectedSeats.includes(seat.seatNumber);
-                    const isOccupied = occupiedSeats.includes(seat.seatNumber);
-                    const isHeld = heldSeats.includes(seat.seatNumber);
-                    const isLiveViewing = liveViewingSeats.includes(seat.seatNumber);
-
-                    return (
-                      <button
-                        key={seat.seatNumber}
-                        onClick={() => handleSeatClick(seat.seatNumber)}
-                        disabled={isOccupied || isHeld || isLiveViewing}
-                        className={`rounded border cursor-pointer transition-all duration-200 flex items-center justify-center font-medium
-                          ${widthClass} ${styleClass}
-                          ${isSelected ? "bg-primary! text-white! border-primary! scale-110" : ""}
-                          ${isOccupied ? "opacity-30! cursor-not-allowed! bg-gray-800! border-gray-600! text-gray-500!" : ""}
-                          ${isHeld ? "bg-orange-500/60! border-orange-500! text-white! cursor-not-allowed! animate-pulse" : ""}
-                          
-                          /* Hiệu ứng viền đỏ nhấp nháy khi người khác đang bấm */
-                          ${isLiveViewing ? "border-red-500! text-red-500! bg-red-500/10! cursor-wait! animate-pulse" : ""}
-                        `}
-                      >
-                        {seat.seatNumber}
-                      </button>
-                    )
-                  })}
-                </div>
+        <div className='mb-6 rounded-2xl border border-primary/20 bg-primary/8 p-4 md:p-5'>
+          <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
+            <div>
+              <p className='text-xs font-medium uppercase tracking-[0.22em] text-primary/80'>Đang chọn ghế</p>
+              <h1 className='mt-2 text-2xl font-semibold text-white'>{movieTitle}</h1>
+              <div className='mt-3 flex flex-wrap gap-2 text-sm text-gray-300'>
+                <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5'>
+                  <CalendarDaysIcon className='h-4 w-4 text-primary' />
+                  {selectedShowDate || date}
+                </span>
+                <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5'>
+                  <ClockIcon className='h-4 w-4 text-primary' />
+                  {selectedTime ? isoTimeFormat(selectedTime.time) : 'Chưa chọn giờ'}
+                </span>
+                <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5'>
+                  <MapPinIcon className='h-4 w-4 text-primary' />
+                  {roomData?.roomName || selectedTime?.roomName || 'Chưa có phòng'}
+                </span>
+                {movie?.runtime && (
+                  <span className='inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5'>
+                    <ClockIcon className='h-4 w-4 text-primary' />
+                    {timeFormat(movie.runtime)}
+                  </span>
+                )}
               </div>
-            )
-          })}
+            </div>
+            <div className='grid grid-cols-3 gap-3 text-center text-xs text-gray-400 md:min-w-72'>
+              <div className='rounded-xl border border-white/10 bg-black/15 px-3 py-3'>
+                <p className='text-lg font-semibold text-white'>{seatStats.capacity}</p>
+                <p>Tổng ghế</p>
+              </div>
+              <div className='rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-3'>
+                <p className='text-lg font-semibold text-emerald-300'>{seatStats.available}</p>
+                <p>Còn trống</p>
+              </div>
+              <div className='rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-3'>
+                <p className='text-lg font-semibold text-rose-300'>{seatStats.sold}</p>
+                <p>Đã bán</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Chú thích các loại ghế (Legend) */}
-        {seatMap.length > 0 && (
-          <div className='flex flex-wrap gap-4 md:gap-6 mt-10 text-sm text-gray-400 justify-center'>
-            <div className='flex items-center gap-2'><div className='w-4 h-4 border border-primary/60 rounded'></div> Tiêu chuẩn</div>
-            <div className='flex items-center gap-2'><div className='w-4 h-4 border border-yellow-500 rounded'></div> VIP</div>
-            <div className='flex items-center gap-2'><div className='w-8 h-4 border border-pink-500 rounded'></div> Ghế đôi</div>
-            
-            <div className='flex items-center gap-2'><div className='w-4 h-4 border border-red-500 bg-red-500/10 rounded animate-pulse'></div> Đang có người chọn</div>
-            <div className='flex items-center gap-2'><div className='w-4 h-4 bg-orange-500/60 border border-orange-500 rounded animate-pulse'></div> Chờ thanh toán</div>
-            <div className='flex items-center gap-2'><div className='w-4 h-4 bg-gray-800 rounded'></div> Đã bán</div>
-          </div>
-        )}
-
-        {selectedSeats.length > 0 && (
-          <div className='mt-10 w-full max-w-md rounded-2xl border border-primary/20 bg-primary/8 p-4 text-sm text-gray-300'>
-            <div className='flex items-center justify-between gap-4'>
-              <div>
-                <p className='font-medium text-white'>Ví QuickShow</p>
-                <p className='mt-1 text-xs text-gray-400'>Số dư: {walletBalance.toLocaleString()} {currency}</p>
-              </div>
-              <label className='inline-flex items-center gap-2 text-xs text-gray-200'>
-                <input
-                  type='checkbox'
-                  checked={useWallet}
-                  onChange={(event) => setUseWallet(event.target.checked)}
-                  disabled={walletBalance <= 0}
-                  className='h-4 w-4 accent-primary'
-                />
-                Dùng ví
-              </label>
+        <div className='grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start'>
+          <div className='p-0 md:p-2'>
+            <div className='flex flex-col items-center'>
+              <img src={assets.screenImage} alt="Màn hình chiếu" className='mt-2 max-w-full' />
+              <p className='text-gray-400 text-sm mb-6 mt-2 tracking-[0.3em]'>MÀN HÌNH</p>
             </div>
-            {useWallet && walletAmountUsed > 0 && (
-              <div className='mt-3 space-y-1 border-t border-white/10 pt-3 text-xs'>
-                <p className='flex justify-between'><span>Trừ từ ví</span><span>{walletAmountUsed.toLocaleString()} {currency}</span></p>
-                <p className='flex justify-between'><span>Còn thanh toán Stripe</span><span>{stripeAmount.toLocaleString()} {currency}</span></p>
+
+            <div className='flex flex-col items-center mt-8 text-xs text-gray-300 w-full overflow-x-auto pb-6'>
+              {seatMap?.map((rowObj) => {
+                if (rowObj.seats.length === 0) return <div key={rowObj.row} className="h-3 md:h-6 w-full"></div>; 
+                return (
+                  <div key={rowObj.row} className='flex gap-2 mt-3 items-center justify-center w-full min-w-max'>
+                    <div className='w-6 text-center font-bold text-gray-500 mr-2 md:mr-4'>{rowObj.row}</div>
+                    <div className='flex items-center justify-center gap-2 md:gap-3'>
+                      {rowObj.seats.map((seat) => {
+                        if (seat.seatType === 'EMPTY') return <div key={seat.seatNumber} className='w-6 md:w-8 h-8'></div>;
+
+                        let styleClass = 'border-primary/60 hover:bg-primary/20 text-white'; 
+                        let widthClass = 'w-8 h-8 md:w-10 md:h-10';
+
+                        if (seat.seatType === 'VIP') {
+                          styleClass = 'border-yellow-500 hover:bg-yellow-500/20 text-white';
+                        } else if (seat.seatType === 'COUPLE') {
+                          styleClass = 'border-pink-500 hover:bg-pink-500/20 text-white';
+                          widthClass = 'w-16 h-8 md:w-18 md:h-10'; 
+                        }
+
+                        const isSelected = selectedSeats.includes(seat.seatNumber);
+                        const isOccupied = occupiedSeats.includes(seat.seatNumber);
+                        const isHeld = heldSeats.includes(seat.seatNumber);
+                        const isLiveViewing = liveViewingSeats.includes(seat.seatNumber);
+
+                        return (
+                          <button
+                            key={seat.seatNumber}
+                            onClick={() => handleSeatClick(seat.seatNumber)}
+                            disabled={isOccupied || isHeld || isLiveViewing}
+                            className={`rounded border cursor-pointer transition-all duration-200 flex items-center justify-center font-medium
+                              ${widthClass} ${styleClass}
+                              ${isSelected ? "bg-primary! text-white! border-primary! scale-110" : ""}
+                              ${isOccupied ? "opacity-30! cursor-not-allowed! bg-gray-800! border-gray-600! text-gray-500!" : ""}
+                              ${isHeld ? "bg-orange-500/60! border-orange-500! text-white! cursor-not-allowed! animate-pulse" : ""}
+                              ${isLiveViewing ? "border-red-500! text-red-500! bg-red-500/10! cursor-wait! animate-pulse" : ""}
+                            `}
+                          >
+                            {seat.seatNumber}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {seatMap.length > 0 && (
+              <div className='mt-6 space-y-5 border-t border-white/10 pt-5'>
+                <div>
+                  <p className='mb-3 text-sm font-medium text-white'>Chú thích ghế</p>
+                  <div className='flex flex-wrap gap-3 text-xs text-gray-400'>
+                    <div className='flex items-center gap-2'><div className='w-4 h-4 border border-primary/60 rounded'></div> Tiêu chuẩn</div>
+                    <div className='flex items-center gap-2'><div className='w-4 h-4 border border-yellow-500 rounded'></div> VIP</div>
+                    <div className='flex items-center gap-2'><div className='w-8 h-4 border border-pink-500 rounded'></div> Ghế đôi</div>
+                    <div className='flex items-center gap-2'><div className='w-4 h-4 bg-primary border border-primary rounded'></div> Đang chọn</div>
+                    <div className='flex items-center gap-2'><div className='w-4 h-4 border border-red-500 bg-red-500/10 rounded animate-pulse'></div> Người khác đang chọn</div>
+                    <div className='flex items-center gap-2'><div className='w-4 h-4 bg-orange-500/60 border border-orange-500 rounded animate-pulse'></div> Chờ thanh toán</div>
+                    <div className='flex items-center gap-2'><div className='w-4 h-4 bg-gray-800 rounded'></div> Đã bán</div>
+                  </div>
+                </div>
+                <div>
+                  <p className='mb-3 text-sm font-medium text-white'>Bảng giá</p>
+                  <div className='max-w-sm space-y-2 rounded-xl border border-white/10 bg-black/15 p-3 text-sm text-gray-300'>
+                    <p className='flex justify-between'><span>Tiêu chuẩn</span><span>{formatMoney(basePrice, currency)}</span></p>
+                    <p className='flex justify-between'><span>VIP</span><span>{formatMoney(basePrice + 20000, currency)}</span></p>
+                    <p className='flex justify-between'><span>Ghế đôi</span><span>{formatMoney(basePrice * 2, currency)}</span></p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        )}
 
-        <button onClick={bookTickets} className='flex items-center gap-2 mt-6 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95'>
-          {stripeAmount === 0 && selectedSeats.length > 0 ? 'Thanh toán bằng ví' : 'Tiến hành thanh toán'}
-          {selectedSeats.length > 0 && ` | ${totalPrice.toLocaleString()} ${currency}`}
-          <ArrowRightIcon strokeWidth={3} className='h-4 w-4 ml-2' />
-        </button>
+          <aside className='rounded-2xl border border-primary/20 bg-primary/8 p-4 text-sm text-gray-300 xl:sticky xl:top-28'>
+            <div className='flex items-center gap-2 text-white'>
+              <TicketIcon className='h-5 w-5 text-primary' />
+              <p className='font-semibold'>Tóm tắt đặt vé</p>
+            </div>
+
+            <div className='mt-4 space-y-3 rounded-xl border border-white/10 bg-black/15 p-3'>
+              <p className='flex justify-between gap-3'><span className='text-gray-400'>Phim</span><span className='text-right text-white'>{movieTitle}</span></p>
+              <p className='flex justify-between gap-3'><span className='text-gray-400'>Suất chiếu</span><span>{selectedTime ? isoTimeFormat(selectedTime.time) : '-'}</span></p>
+              <p className='flex justify-between gap-3'><span className='text-gray-400'>Phòng</span><span>{roomData?.roomName || selectedTime?.roomName || '-'}</span></p>
+            </div>
+
+            <div className='mt-4'>
+              <p className='mb-2 text-xs font-medium uppercase tracking-[0.2em] text-primary/80'>Ghế đã chọn</p>
+              {selectedSeatDetails.length > 0 ? (
+                <div className='space-y-2'>
+                  {selectedSeatDetails.map((seat) => (
+                    <div key={seat.seatNumber} className='flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2'>
+                      <span className='font-medium text-white'>{seat.seatNumber}</span>
+                      <span className='text-xs text-gray-400'>{seat.label}</span>
+                      <span>{formatMoney(seat.unitPrice, currency)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className='rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-gray-500'>
+                  Chưa chọn ghế
+                </div>
+              )}
+            </div>
+
+            <div className='mt-4 rounded-xl border border-white/10 bg-black/15 p-3'>
+              <div className='flex items-center justify-between gap-4'>
+                <div className='flex items-center gap-2'>
+                  <WalletIcon className='h-4 w-4 text-primary' />
+                  <div>
+                    <p className='font-medium text-white'>Ví QuickShow</p>
+                    <p className='text-xs text-gray-400'>Số dư: {formatMoney(walletBalance, currency)}</p>
+                  </div>
+                </div>
+                <label className='inline-flex items-center gap-2 text-xs text-gray-200'>
+                  <input
+                    type='checkbox'
+                    checked={useWallet}
+                    onChange={(event) => setUseWallet(event.target.checked)}
+                    disabled={walletBalance <= 0}
+                    className='h-4 w-4 accent-primary'
+                  />
+                  Dùng ví
+                </label>
+              </div>
+              {useWallet && walletAmountUsed > 0 && (
+                <div className='mt-3 space-y-1 border-t border-white/10 pt-3 text-xs'>
+                  <p className='flex justify-between'><span>Trừ từ ví</span><span>{formatMoney(walletAmountUsed, currency)}</span></p>
+                  <p className='flex justify-between'><span>Còn thanh toán Stripe</span><span>{formatMoney(stripeAmount, currency)}</span></p>
+                </div>
+              )}
+            </div>
+
+            <div className='mt-4 space-y-2 border-t border-white/10 pt-4'>
+              <p className='flex justify-between'><span>Tạm tính</span><span>{formatMoney(totalPrice, currency)}</span></p>
+              <p className='flex justify-between text-lg font-semibold text-white'><span>Tổng thanh toán</span><span>{formatMoney(stripeAmount, currency)}</span></p>
+            </div>
+
+            <div className='mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-gray-400'>
+              <p className='mb-1 flex items-center gap-2 font-medium text-gray-200'><InfoIcon className='h-4 w-4 text-primary' /> Lưu ý</p>
+              <p>Chọn tối đa 5 ghế mỗi giao dịch. Ghế sẽ được giữ trong 30 phút khi chuyển sang thanh toán. Vé đã thanh toán có thể hủy trước giờ chiếu ít nhất 24 giờ.</p>
+            </div>
+
+            <button onClick={bookTickets} className='mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium transition hover:bg-primary-dull active:scale-95'>
+              {stripeAmount === 0 && selectedSeats.length > 0 ? 'Thanh toán bằng ví' : 'Tiến hành thanh toán'}
+              <ArrowRightIcon strokeWidth={3} className='h-4 w-4' />
+            </button>
+          </aside>
+        </div>
       </div>
     </div>
   ) : (
