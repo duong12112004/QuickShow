@@ -11,6 +11,7 @@ import bookingRouter from './routes/bookingRoutes.js';
 import adminRouter from './routes/adminRoutes.js';
 import userRouter from './routes/userRoutes.js';
 import reviewRouter from './routes/reviewRoutes.js';
+import concessionRouter from './routes/concessionRoutes.js';
 import { stripeWebhooks } from './controllers/stripeWebhooks.js';
 
 // Import HTTP và hàm khởi tạo Socket đã tách file
@@ -44,5 +45,6 @@ app.use('/api/booking',bookingRouter)
 app.use('/api/admin',adminRouter)
 app.use('/api/user',userRouter)
 app.use('/api/reviews', reviewRouter)
+app.use('/api/concessions', concessionRouter)
 
 httpServer.listen(port, () => console.log(`Server & Socket.io listening at http://localhost:${port}`));

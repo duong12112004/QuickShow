@@ -26,6 +26,34 @@ const formatEmailDateTime = (value) => (
 
 const formatEmailMoney = (value, currency = "VND") => `${Number(value || 0).toLocaleString("vi-VN")} ${currency}`;
 
+const renderConcessionItems = (booking) => {
+    const items = booking.concessionItems || [];
+
+    if (!items.length) {
+        return "";
+    }
+
+    const rows = items.map((item) => `
+        <tr>
+            <td style="padding: 8px 0;">${item.name} x${item.quantity}</td>
+            <td style="padding: 8px 0; text-align: right;">${formatEmailMoney(item.totalPrice, booking.currency)}</td>
+        </tr>
+    `).join("");
+
+    return `
+        <div style="background-color: #fff7f8; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #ffd7df;">
+            <p style="margin: 0 0 10px 0;"><strong>Combo bắp nước đã mua</strong></p>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                ${rows}
+                <tr>
+                    <td style="padding: 10px 0 0 0; border-top: 1px solid #ffd7df;"><strong>Tổng đồ ăn</strong></td>
+                    <td style="padding: 10px 0 0 0; border-top: 1px solid #ffd7df; text-align: right;"><strong>${formatEmailMoney(booking.concessionAmount, booking.currency)}</strong></td>
+                </tr>
+            </table>
+        </div>
+    `;
+};
+
 const getBookingRefundMessage = (booking) => {
     if (booking.paymentStatus === PAYMENT_STATUS.REFUND_FAILED) {
         return "Yêu cầu hoàn tiền chưa hoàn tất. QuickShow sẽ kiểm tra và xử lý lại trong thời gian sớm nhất.";
@@ -198,6 +226,8 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                             <p style="margin: 0 0 10px 0;"><strong>Ngày giờ chiếu:</strong> ${new Date(booking.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>
                             <p style="margin: 0;"><strong>Ghế:</strong> ${booking.bookedSeats.join(", ")}</p>
                         </div>
+                        ${renderConcessionItems(booking)}
+                        <p><strong>Tổng thanh toán:</strong> ${formatEmailMoney(booking.amount, booking.currency)}</p>
                         <div style="margin: 20px 0; text-align: center;">
                             <p style="margin: 0 0 12px 0; font-weight: 700;">QR check-in</p>
                             <img src="cid:booking-check-in-qr" alt="QR check-in ${booking.bookingCode}" width="220" height="220" style="display: inline-block; border: 1px solid #eee; border-radius: 12px; padding: 10px; background: #fff;" />
@@ -244,6 +274,7 @@ const sendBookingCancellationEmail = inngest.createFunction(
                         <h2>Xin chào ${booking.user.name},</h2>
                         <p>Booking <strong>${booking.bookingCode}</strong> đã được hủy ${actorLabel}.</p>
                         ${renderBookingSummary(booking)}
+                        ${renderConcessionItems(booking)}
                         <div style="background-color: #fff6e5; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f1c56c;">
                             <p style="margin: 0 0 10px 0;"><strong>Lý do hủy:</strong> ${reason}</p>
                             <p style="margin: 0;"><strong>Hoàn tiền:</strong> ${getBookingRefundMessage(booking)}</p>
@@ -280,6 +311,7 @@ const sendShowtimeCancellationEmail = inngest.createFunction(
                         <h2>Xin chào ${booking.user.name},</h2>
                         <p>QuickShow rất tiếc phải thông báo suất chiếu của phim <strong style="color: #F84565;">${booking.movieTitle}</strong> đã bị hủy.</p>
                         ${renderBookingSummary(booking)}
+                        ${renderConcessionItems(booking)}
                         <div style="background-color: #fff6e5; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f1c56c;">
                             <p style="margin: 0 0 10px 0;"><strong>Lý do hủy suất chiếu:</strong> ${reason}</p>
                             <p style="margin: 0;"><strong>Trạng thái booking/hoàn tiền:</strong> ${getBookingRefundMessage(booking)}</p>

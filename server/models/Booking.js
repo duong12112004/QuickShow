@@ -19,6 +19,16 @@ const bookingSchema = new mongoose.Schema({
         seatType: { type: String, required: true },
         unitPrice: { type: Number, required: true }
     }],
+    ticketAmount: { type: Number, default: 0 },
+    concessionItems: [{
+        concession: { type: mongoose.Schema.Types.ObjectId, ref: "Concession", default: null },
+        name: { type: String, required: true },
+        category: { type: String, default: "" },
+        unitPrice: { type: Number, required: true },
+        quantity: { type: Number, required: true, min: 1 },
+        totalPrice: { type: Number, required: true }
+    }],
+    concessionAmount: { type: Number, default: 0 },
     amount: { type: Number, required: true },
     currency: { type: String, default: "VND" },
     bookingStatus: {

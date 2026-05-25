@@ -430,6 +430,18 @@ const MyBookings = () => {
                       <p><span className='text-gray-400'>Lịch chiếu:</span> {showDateTime ? dateFormat(showDateTime) : 'Chưa có dữ liệu'}</p>
                       <p><span className='text-gray-400'>Ghế đã chọn:</span> {item.bookedSeats.join(', ')}</p>
                       <p><span className='text-gray-400'>Số lượng vé:</span> {item.bookedSeats.length}</p>
+                      {item.concessionItems?.length > 0 && (
+                        <>
+                          <p>
+                            <span className='text-gray-400'>Combo bắp nước:</span>{' '}
+                            {item.concessionItems.map((concession) => `${concession.name} x${concession.quantity}`).join(', ')}
+                          </p>
+                          <p>
+                            <span className='text-gray-400'>Tiền combo:</span>{' '}
+                            {(item.concessionAmount || item.concessionItems.reduce((sum, concession) => sum + Number(concession.totalPrice || 0), 0)).toLocaleString()} {currency}
+                          </p>
+                        </>
+                      )}
                       {item.show?.movie?.runtime && (
                         <p><span className='text-gray-400'>Thời lượng:</span> {timeFormat(item.show.movie.runtime)}</p>
                       )}
@@ -461,6 +473,7 @@ const MyBookings = () => {
                         Thông tin hoàn tiền: {item.refundReason}
                       </p>
                     )}
+
                   </div>
 
                   <div className='flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/10 p-4 lg:min-h-full'>
@@ -737,6 +750,12 @@ const MyBookings = () => {
               <p className='mt-4 text-sm leading-6 text-gray-300'>
                 Đưa QR này cho nhân viên rạp quét khi đến check-in.
               </p>
+              {qrTarget.concessionItems?.length > 0 && (
+                <div className='mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 text-left text-sm text-amber-100'>
+                  <p className='font-medium text-amber-50'>Combo đã mua</p>
+                  <p className='mt-1'>{qrTarget.concessionItems.map((item) => `${item.name} x${item.quantity}`).join(', ')}</p>
+                </div>
+              )}
             </div>
           </div>
         )}

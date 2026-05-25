@@ -97,13 +97,86 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
     }
 };
 
+const getSeatTypeLabel = (seatType) => {
+    if (seatType === "VIP") return "Ghế VIP";
+    if (seatType === "COUPLE") return "Ghế đôi";
+    return "Ghế tiêu chuẩn";
+};
+
+const formatCheckoutDateTime = (value) => (
+    value
+        ? new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
+        : "Chưa có dữ liệu"
+);
+
+const trimStripeText = (value, maxLength = 450) => {
+    const text = `${value || ""}`.trim();
+    return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
+};
+
+const buildCheckoutLineItems = (booking) => {
+    const lineItems = [];
+    const seatGroups = new Map();
+
+    (booking.seatDetails || []).forEach((seat) => {
+        const key = `${seat.seatType}-${seat.unitPrice}`;
+        const current = seatGroups.get(key) || {
+            seatType: seat.seatType,
+            unitPrice: seat.unitPrice,
+            seats: []
+        };
+
+        current.seats.push(seat.seatNumber);
+        seatGroups.set(key, current);
+    });
+
+    seatGroups.forEach((group) => {
+        if (group.unitPrice <= 0 || group.seats.length === 0) return;
+
+        lineItems.push({
+            price_data: {
+                currency: "vnd",
+                product_data: {
+                    name: `${getSeatTypeLabel(group.seatType)} - ${booking.movieTitle}`,
+                    description: trimStripeText([
+                        `Mã booking: ${booking.bookingCode}`,
+                        `Phòng: ${booking.roomName}`,
+                        `Suất chiếu: ${formatCheckoutDateTime(booking.showDateTime)}`,
+                        `Ghế: ${group.seats.join(", ")}`
+                    ].join(" | "))
+                },
+                unit_amount: Math.floor(group.unitPrice)
+            },
+            quantity: group.seats.length
+        });
+    });
+
+    (booking.concessionItems || []).forEach((item) => {
+        if (item.unitPrice <= 0 || item.quantity <= 0) return;
+
+        lineItems.push({
+            price_data: {
+                currency: "vnd",
+                product_data: {
+                    name: `Combo bắp nước - ${item.name}`,
+                    description: trimStripeText(`Mua kèm booking ${booking.bookingCode}`)
+                },
+                unit_amount: Math.floor(item.unitPrice)
+            },
+            quantity: item.quantity
+        });
+    });
+
+    return lineItems;
+};
+
 export const createBooking = async (req, res) => {
     let booking = null;
     let debitedWalletAmount = 0;
 
     try {
         const userId = ensureAuthenticatedUser(req);
-        const { showId, selectedSeats, useWallet = false } = req.body;
+        const { showId, selectedSeats, concessions = [], useWallet = false } = req.body;
         const { origin } = req.headers;
 
         const normalizedSeats = validateSelectedSeats(selectedSeats);
@@ -118,11 +191,12 @@ export const createBooking = async (req, res) => {
 
         const showData = await getBookableShowtime(showId);
         const bookingCode = await generateUniqueBookingCode();
-        const snapshot = buildBookingSnapshot({
+        const snapshot = await buildBookingSnapshot({
             showData,
             userId,
             selectedSeats: normalizedSeats,
-            bookingCode
+            bookingCode,
+            selectedConcessions: concessions
         });
         const wallet = useWallet ? await getOrCreateWallet(userId) : null;
         const walletAmountUsed = useWallet ? Math.min(wallet?.balance || 0, snapshot.amount) : 0;
@@ -195,20 +269,23 @@ export const createBooking = async (req, res) => {
         }
 
         const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
+        const lineItems = buildCheckoutLineItems(booking);
+        const walletDiscount = walletAmountUsed > 0
+            ? await stripeInstance.coupons.create({
+                amount_off: Math.floor(walletAmountUsed),
+                currency: "vnd",
+                duration: "once",
+                name: `Ví QuickShow - ${booking.bookingCode}`
+            })
+            : null;
+
         const session = await stripeInstance.checkout.sessions.create({
             success_url: `${origin}/loading/my-bookings?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/my-bookings`,
-            line_items: [{
-                price_data: {
-                    currency: "vnd",
-                    product_data: {
-                        name: `${showData.movie.title} - Mã vé ${booking.bookingCode}`
-                    },
-                    unit_amount: Math.floor(stripeAmount)
-                },
-                quantity: 1
-            }],
+            line_items: lineItems,
             mode: "payment",
+            client_reference_id: booking.bookingCode,
+            discounts: walletDiscount ? [{ coupon: walletDiscount.id }] : undefined,
             metadata: {
                 bookingId: booking._id.toString(),
                 bookingCode: booking.bookingCode,

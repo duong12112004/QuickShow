@@ -24,6 +24,12 @@ import {
     updateRoom,
     updateRoomStatus
 } from "../controllers/roomController.js";
+import {
+    createConcession,
+    deleteConcession,
+    getAdminConcessions,
+    updateConcession
+} from "../controllers/concessionController.js";
 
 const adminRouter = express.Router();
 
@@ -44,6 +50,10 @@ adminRouter.get('/all-bookings', protectAdmin, getAllBookings);
 adminRouter.get('/reviews', protectAdmin, getAdminReviews);
 adminRouter.patch('/reviews/:reviewId/hide', protectAdmin, hideReview);
 adminRouter.patch('/reviews/:reviewId/restore', protectAdmin, restoreReview);
+adminRouter.get('/concessions', protectAdmin, getAdminConcessions);
+adminRouter.post('/concessions', protectAdmin, createConcession);
+adminRouter.put('/concessions/:concessionId', protectAdmin, updateConcession);
+adminRouter.delete('/concessions/:concessionId', protectAdmin, deleteConcession);
 adminRouter.get('/seed', protectAdmin, seedCinemaData);
 adminRouter.get('/rooms', protectAdmin, getAllRooms);
 adminRouter.get('/rooms/:roomId', protectAdmin, getRoomDetail);

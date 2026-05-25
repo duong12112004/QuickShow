@@ -165,7 +165,10 @@ const ListBookings = () => {
       });
 
       if (data.success) {
-        toast.success(`${data.message} Khách: ${data.booking.userName} | Ghế: ${data.booking.bookedSeats.join(', ')}`);
+        const concessionText = data.booking.concessionItems?.length
+          ? ` | Combo: ${data.booking.concessionItems.map((item) => `${item.name} x${item.quantity}`).join(', ')}`
+          : '';
+        toast.success(`${data.message} Khách: ${data.booking.userName} | Ghế: ${data.booking.bookedSeats.join(', ')}${concessionText}`);
         setCheckInCode('');
         await getAllBookings(filters, { silent: true });
       } else {
@@ -192,7 +195,10 @@ const ListBookings = () => {
       if (data.success) {
         setLastCheckInResult(data.booking);
         setScannerStatus('');
-        toast.success(`${data.message} Khách: ${data.booking.userName} | Ghế: ${data.booking.bookedSeats.join(', ')}`);
+        const concessionText = data.booking.concessionItems?.length
+          ? ` | Combo: ${data.booking.concessionItems.map((item) => `${item.name} x${item.quantity}`).join(', ')}`
+          : '';
+        toast.success(`${data.message} Khách: ${data.booking.userName} | Ghế: ${data.booking.bookedSeats.join(', ')}${concessionText}`);
         await getAllBookings(filters, { silent: true });
         setIsScannerOpen(false);
       } else {
@@ -510,6 +516,11 @@ const ListBookings = () => {
               <p className='mt-1 text-emerald-100/80'>
                 {lastCheckInResult.movieTitle} | Ghế: {lastCheckInResult.bookedSeats.join(', ')}
               </p>
+              {lastCheckInResult.concessionItems?.length > 0 && (
+                <p className='mt-1 text-emerald-100/80'>
+                  Combo: {lastCheckInResult.concessionItems.map((item) => `${item.name} x${item.quantity}`).join(', ')}
+                </p>
+              )}
             </div>
           )}
 
@@ -593,7 +604,15 @@ const ListBookings = () => {
                       </div>
                     </div>
                   </td>
-                  <td className='p-3 text-gray-200'>{item.bookedSeats.join(', ')}</td>
+                  <td className='p-3 text-gray-200'>
+                    <p>{item.bookedSeats.join(', ')}</p>
+                    {item.concessionItems?.length > 0 && (
+                      <div className='mt-2 rounded-xl border border-amber-400/20 bg-amber-500/10 p-2 text-xs text-amber-100'>
+                        <p className='font-medium'>Combo cần giao</p>
+                        <p className='mt-1'>{item.concessionItems.map((concession) => `${concession.name} x${concession.quantity}`).join(', ')}</p>
+                      </div>
+                    )}
+                  </td>
                   <td className='p-3'>
                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${bookingStatus.className}`}>
                       {bookingStatus.label}

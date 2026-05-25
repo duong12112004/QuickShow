@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import crypto from "crypto";
 import Show from "../models/Show.js";
+import Concession, { CONCESSION_STATUS } from "../models/Concession.js";
 import { getShowtimeLifecycle } from "./showtimeService.js";
 import { creditWallet, reverseWalletDebit } from "./walletService.js";
 
@@ -53,6 +54,9 @@ const STRIPE_SEAT_TYPE_PRICING = {
     VIP: (basePrice) => basePrice + 20000,
     COUPLE: (basePrice) => basePrice * 2
 };
+
+const MAX_CONCESSION_PER_ITEM = 3;
+const MAX_CONCESSION_TOTAL = 10;
 
 export const createBookingCode = () => {
     const timestamp = Date.now().toString().slice(-6);
@@ -200,8 +204,73 @@ export const buildSeatPricingSnapshot = (showData, selectedSeats) => {
     return { seatDetails, amount };
 };
 
-export const buildBookingSnapshot = ({ showData, userId, selectedSeats, bookingCode }) => {
-    const { seatDetails, amount } = buildSeatPricingSnapshot(showData, selectedSeats);
+export const buildConcessionSnapshot = async (selectedConcessions = []) => {
+    if (!Array.isArray(selectedConcessions) || selectedConcessions.length === 0) {
+        return { concessionItems: [], concessionAmount: 0 };
+    }
+
+    const quantityById = new Map();
+
+    selectedConcessions.forEach((item) => {
+        const concessionId = `${item?.concessionId || item?._id || item?.id || ""}`.trim();
+        const quantity = Math.floor(Number(item?.quantity || 0));
+
+        if (!concessionId || quantity <= 0) {
+            return;
+        }
+
+        quantityById.set(concessionId, (quantityById.get(concessionId) || 0) + quantity);
+    });
+
+    const selectedIds = [...quantityById.keys()];
+    if (selectedIds.length === 0) {
+        return { concessionItems: [], concessionAmount: 0 };
+    }
+
+    const totalQuantity = [...quantityById.values()].reduce((sum, quantity) => sum + quantity, 0);
+
+    if (totalQuantity > MAX_CONCESSION_TOTAL) {
+        throw new Error(`Bạn chỉ có thể chọn tối đa ${MAX_CONCESSION_TOTAL} món đồ ăn trong một booking.`);
+    }
+
+    const concessions = await Concession.find({
+        _id: { $in: selectedIds },
+        status: CONCESSION_STATUS.ACTIVE
+    });
+
+    if (concessions.length !== selectedIds.length) {
+        throw new Error("Một số món ăn đã ngừng bán hoặc không tồn tại.");
+    }
+
+    const concessionItems = concessions.map((item) => {
+        const quantity = quantityById.get(item._id.toString());
+
+        if (quantity > MAX_CONCESSION_PER_ITEM) {
+            throw new Error(`Số lượng ${item.name} không được vượt quá ${MAX_CONCESSION_PER_ITEM}.`);
+        }
+
+        const unitPrice = Math.max(Math.floor(Number(item.price || 0)), 0);
+        const totalPrice = unitPrice * quantity;
+
+        return {
+            concession: item._id,
+            name: item.name,
+            category: item.category,
+            unitPrice,
+            quantity,
+            totalPrice
+        };
+    });
+
+    const concessionAmount = concessionItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+    return { concessionItems, concessionAmount };
+};
+
+export const buildBookingSnapshot = async ({ showData, userId, selectedSeats, bookingCode, selectedConcessions = [] }) => {
+    const { seatDetails, amount: ticketAmount } = buildSeatPricingSnapshot(showData, selectedSeats);
+    const { concessionItems, concessionAmount } = await buildConcessionSnapshot(selectedConcessions);
+    const amount = ticketAmount + concessionAmount;
 
     return {
         bookingCode,
@@ -212,6 +281,9 @@ export const buildBookingSnapshot = ({ showData, userId, selectedSeats, bookingC
         showDateTime: showData.showDateTime,
         bookedSeats: selectedSeats,
         seatDetails,
+        ticketAmount,
+        concessionItems,
+        concessionAmount,
         amount,
         paymentProvider: PAYMENT_PROVIDER.STRIPE_TEST,
         expiresAt: new Date(Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000)

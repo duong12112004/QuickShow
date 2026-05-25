@@ -366,6 +366,7 @@ const serializeBookingsToCsv = (bookings) => {
         "Phòng",
         "Lịch chiếu",
         "Ghế",
+        "Combo bắp nước",
         "Trạng thái booking",
         "Trạng thái thanh toán",
         "Tổng tiền",
@@ -397,6 +398,9 @@ const serializeBookingsToCsv = (bookings) => {
             ? new Date(booking.showDateTime || booking.show?.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
             : "",
         booking.bookedSeats.join(", "),
+        (booking.concessionItems || [])
+            .map((item) => `${item.name} x${item.quantity}`)
+            .join("; "),
         booking.bookingStatus,
         booking.paymentStatus,
         booking.amount,
@@ -1075,6 +1079,7 @@ export const checkInBookingByCode = async (req, res) => {
                 roomName: booking.roomName,
                 bookedSeats: booking.bookedSeats,
                 userName: booking.user?.name || "Khách hàng",
+                concessionItems: booking.concessionItems || [],
                 checkedInAt: booking.checkedInAt
             }
         });
@@ -1121,6 +1126,7 @@ export const checkInBookingByQr = async (req, res) => {
                 movieTitle: booking.movieTitle,
                 roomName: booking.roomName,
                 bookedSeats: booking.bookedSeats,
+                concessionItems: booking.concessionItems || [],
                 userName: booking.user?.name || "Khách hàng",
                 checkedInAt: booking.checkedInAt
             }

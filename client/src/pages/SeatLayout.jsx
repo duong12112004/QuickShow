@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import Loading from '../components/Loading'
-import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, InfoIcon, MapPinIcon, TicketIcon, WalletIcon } from 'lucide-react'
+import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, InfoIcon, MapPinIcon, MinusIcon, PlusIcon, PopcornIcon, TicketIcon, WalletIcon, XIcon } from 'lucide-react'
 import isoTimeFormat from '../lib/isoTimeFormat'
 import timeFormat from '../lib/timeFormat'
 import toast from 'react-hot-toast'
@@ -23,6 +23,8 @@ const getSeatTypeLabel = (seatType) => {
 }
 
 const formatMoney = (value, currency) => `${Number(value || 0).toLocaleString()} ${currency}`
+const MAX_CONCESSION_PER_ITEM = 3
+const MAX_CONCESSION_TOTAL = 10
 
 // Component hiển thị sơ đồ ghế ngồi và xử lý luồng đặt vé Real-time
 const SeatLayout = () => {
@@ -39,6 +41,9 @@ const SeatLayout = () => {
   const [roomData, setRoomData] = useState(null) 
   const [basePrice, setBasePrice] = useState(0)
   const [useWallet, setUseWallet] = useState(true)
+  const [concessions, setConcessions] = useState([])
+  const [concessionQuantities, setConcessionQuantities] = useState({})
+  const [isConcessionModalOpen, setIsConcessionModalOpen] = useState(false)
 
   // Quản lý trạng thái ghế đang được người dùng khác click xem (Real-time)
   const [liveViewingSeats, setLiveViewingSeats] = useState([])
@@ -67,6 +72,15 @@ const SeatLayout = () => {
         setRoomData({ roomName: data.roomName })
       } else {
         toast.error(data.message)
+      }
+    } catch (error) { console.log(error) }
+  }
+
+  const getConcessions = async () => {
+    try {
+      const { data } = await axios.get('/api/concessions')
+      if (data.success) {
+        setConcessions(data.concessions || [])
       }
     } catch (error) { console.log(error) }
   }
@@ -157,6 +171,10 @@ const SeatLayout = () => {
       const { data } = await axios.post('/api/booking/create', {
         showId: selectedTime.showId,
         selectedSeats,
+        concessions: selectedConcessions.map((item) => ({
+          concessionId: item._id,
+          quantity: item.quantity
+        })),
         useWallet
       }, {
         headers: { Authorization: `Bearer ${await getToken()}` }
@@ -170,7 +188,7 @@ const SeatLayout = () => {
           return
         }
 
-        window.location.href = data.url;
+        window.location.assign(data.url);
       } else {
         toast.error(data.message)
       }
@@ -218,6 +236,46 @@ const SeatLayout = () => {
     })
   ), [selectedSeats, seatCatalog, basePrice])
 
+  const updateConcessionQuantity = (concessionId, delta) => {
+    setConcessionQuantities((current) => {
+      const currentQuantity = Number(current[concessionId] || 0)
+      const currentTotal = Object.values(current).reduce((sum, quantity) => sum + Number(quantity || 0), 0)
+
+      if (delta > 0 && (currentQuantity >= MAX_CONCESSION_PER_ITEM || currentTotal >= MAX_CONCESSION_TOTAL)) {
+        return current
+      }
+
+      const nextQuantity = Math.max(0, Math.min(MAX_CONCESSION_PER_ITEM, currentQuantity + delta))
+      const next = { ...current }
+
+      if (nextQuantity === 0) {
+        delete next[concessionId]
+      } else {
+        next[concessionId] = nextQuantity
+      }
+
+      return next
+    })
+  }
+
+  const selectedConcessions = concessions
+    .map((item) => {
+      const quantity = Number(concessionQuantities[item._id] || 0)
+      return {
+        ...item,
+        quantity,
+        totalPrice: Number(item.price || 0) * quantity
+      }
+    })
+    .filter((item) => item.quantity > 0)
+
+  const concessionTotal = selectedConcessions.reduce((sum, item) => sum + item.totalPrice, 0)
+  const concessionItemCount = selectedConcessions.reduce((sum, item) => sum + item.quantity, 0)
+
+  const clearConcessions = () => {
+    setConcessionQuantities({})
+  }
+
   const seatStats = useMemo(() => {
     let capacity = 0
     let standard = 0
@@ -247,7 +305,8 @@ const SeatLayout = () => {
     }
   }, [seatMap, occupiedSeats.length, heldSeats.length])
 
-  const totalPrice = calculateTotalPrice()
+  const ticketTotal = calculateTotalPrice()
+  const totalPrice = ticketTotal + concessionTotal
   const walletAmountUsed = useWallet ? Math.min(walletBalance, totalPrice) : 0
   const stripeAmount = Math.max(totalPrice - walletAmountUsed, 0)
   const movie = show?.movie
@@ -257,21 +316,30 @@ const SeatLayout = () => {
     : ''
 
   useEffect(() => {
-    getShow()
+    const timeoutId = setTimeout(() => {
+      getShow()
+      getConcessions()
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
   }, [id])
 
   useEffect(() => {
-    if (!show?.dateTime?.[date]) return
+    const timeoutId = setTimeout(() => {
+      if (!show?.dateTime?.[date]) return
 
-    if (preferredShowId) {
-      const preferredShow = show.dateTime[date].find((item) => item.showId === preferredShowId)
-      if (preferredShow) {
-        setSelectedTime(preferredShow)
-        return
+      if (preferredShowId) {
+        const preferredShow = show.dateTime[date].find((item) => item.showId === preferredShowId)
+        if (preferredShow) {
+          setSelectedTime(preferredShow)
+          return
+        }
       }
-    }
 
-    setSelectedTime(null)
+      setSelectedTime(null)
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
   }, [show, date, preferredShowId])
 
   useEffect(() => {
@@ -283,11 +351,15 @@ const SeatLayout = () => {
   }, [user])
 
   useEffect(() => {
-    if (selectedTime) {
+    if (!selectedTime) return undefined
+
+    const timeoutId = setTimeout(() => {
       getSeatLayout()
-      setSelectedSeats([]) 
-      setLiveViewingSeats([]) // Reset mảng quan sát live khi chuyển suất chiếu
-    }
+      setSelectedSeats([])
+      setLiveViewingSeats([])
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
   }, [selectedTime])
 
   return show ? (
@@ -485,6 +557,31 @@ const SeatLayout = () => {
               )}
             </div>
 
+            {concessions.length > 0 && (
+              <div className='mt-4 rounded-xl border border-white/10 bg-white/5 p-3'>
+                <div className='flex items-start justify-between gap-3'>
+                  <div className='min-w-0'>
+                    <div className='flex items-center gap-2 text-white'>
+                      <PopcornIcon className='h-4 w-4 text-primary' />
+                      <p className='font-medium'>Đồ ăn & nước</p>
+                    </div>
+                    <p className='mt-1 text-xs text-gray-400'>
+                      {concessionItemCount > 0
+                        ? `${concessionItemCount} món - ${formatMoney(concessionTotal, currency)}`
+                        : 'Mua thêm bắp, nước hoặc combo'}
+                    </p>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setIsConcessionModalOpen(true)}
+                    className='shrink-0 rounded-full border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10'
+                  >
+                    {concessionItemCount > 0 ? 'Đổi món' : 'Chọn món'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className='mt-4 rounded-xl border border-white/10 bg-black/15 p-3'>
               <div className='flex items-center justify-between gap-4'>
                 <div className='flex items-center gap-2'>
@@ -514,6 +611,10 @@ const SeatLayout = () => {
             </div>
 
             <div className='mt-4 space-y-2 border-t border-white/10 pt-4'>
+              <p className='flex justify-between'><span>Tiền vé</span><span>{formatMoney(ticketTotal, currency)}</span></p>
+              {concessionTotal > 0 && (
+                <p className='flex justify-between'><span>Đồ ăn & nước</span><span>{formatMoney(concessionTotal, currency)}</span></p>
+              )}
               <p className='flex justify-between'><span>Tạm tính</span><span>{formatMoney(totalPrice, currency)}</span></p>
               <p className='flex justify-between text-lg font-semibold text-white'><span>Tổng thanh toán</span><span>{formatMoney(stripeAmount, currency)}</span></p>
             </div>
@@ -529,6 +630,126 @@ const SeatLayout = () => {
             </button>
           </aside>
         </div>
+
+        {isConcessionModalOpen && (
+          <div
+            className='fixed inset-0 z-[120] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm'
+            onMouseDown={() => setIsConcessionModalOpen(false)}
+          >
+            <div
+              className='flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-primary/20 bg-[#11131c] shadow-[0_30px_100px_rgba(0,0,0,0.55)]'
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className='flex items-start justify-between gap-4 border-b border-white/10 p-5'>
+                <div>
+                  <div className='flex items-center gap-2 text-white'>
+                    <PopcornIcon className='h-5 w-5 text-primary' />
+                    <h2 className='text-lg font-semibold'>Đồ ăn & nước</h2>
+                  </div>
+                  <p className='mt-1 text-sm text-gray-400'>Chọn món mua kèm, số tiền sẽ cộng vào tổng thanh toán.</p>
+                </div>
+                <button
+                  type='button'
+                  onClick={() => setIsConcessionModalOpen(false)}
+                  className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-white/10 hover:text-white'
+                  aria-label='Đóng chọn đồ ăn'
+                >
+                  <XIcon className='h-5 w-5' />
+                </button>
+              </div>
+
+              <div className='overflow-y-auto p-5'>
+                <div className='grid gap-3 md:grid-cols-2'>
+                  {concessions.map((item) => {
+                    const quantity = Number(concessionQuantities[item._id] || 0)
+                    const canIncrease = quantity < MAX_CONCESSION_PER_ITEM && concessionItemCount < MAX_CONCESSION_TOTAL
+
+                    return (
+                      <div key={item._id} className='rounded-xl border border-white/10 bg-white/5 p-4'>
+                        <div className='flex min-h-28 flex-col justify-between gap-4'>
+                          <div className='flex gap-3'>
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className='h-24 w-24 shrink-0 rounded-xl object-cover'
+                                loading='lazy'
+                              />
+                            ) : (
+                              <div className='flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/20 text-primary'>
+                                <PopcornIcon className='h-8 w-8' />
+                              </div>
+                            )}
+                            <div className='min-w-0 flex-1'>
+                              <div className='flex items-start justify-between gap-3'>
+                                <div className='min-w-0'>
+                                  <p className='font-medium text-white'>{item.name}</p>
+                                  {item.description && (
+                                    <p className='mt-1 line-clamp-2 text-xs leading-5 text-gray-400'>{item.description}</p>
+                                  )}
+                                </div>
+                                <p className='shrink-0 text-sm font-semibold text-primary'>{formatMoney(item.price, currency)}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className='flex items-center justify-between gap-3'>
+                            <p className='text-xs text-gray-500'>Tối đa 3 mỗi món, tổng 10 món</p>
+                            <div className='flex shrink-0 items-center gap-2'>
+                              <button
+                                type='button'
+                                onClick={() => updateConcessionQuantity(item._id, -1)}
+                                disabled={quantity <= 0}
+                                className='flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-gray-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40'
+                                aria-label={`Giảm ${item.name}`}
+                              >
+                                <MinusIcon className='h-4 w-4' />
+                              </button>
+                              <span className='w-6 text-center text-sm font-semibold text-white'>{quantity}</span>
+                              <button
+                                type='button'
+                                onClick={() => updateConcessionQuantity(item._id, 1)}
+                                disabled={!canIncrease}
+                                className='flex h-9 w-9 items-center justify-center rounded-full border border-primary/50 text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40'
+                                aria-label={`Tăng ${item.name}`}
+                              >
+                                <PlusIcon className='h-4 w-4' />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className='border-t border-white/10 p-5'>
+                <div className='mb-4 flex items-center justify-between gap-4 text-sm'>
+                  <span className='text-gray-400'>Đã chọn {concessionItemCount}/{MAX_CONCESSION_TOTAL} món</span>
+                  <span className='text-lg font-semibold text-white'>{formatMoney(concessionTotal, currency)}</span>
+                </div>
+                <div className='flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'>
+                  <button
+                    type='button'
+                    onClick={clearConcessions}
+                    disabled={concessionItemCount === 0}
+                    className='rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40'
+                  >
+                    Xóa món đã chọn
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => setIsConcessionModalOpen(false)}
+                    className='rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-white transition hover:bg-primary-dull'
+                  >
+                    Xong
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   ) : (
