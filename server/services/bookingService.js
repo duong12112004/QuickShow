@@ -26,7 +26,8 @@ export const PAYMENT_STATUS = {
 };
 
 export const PAYMENT_PROVIDER = {
-    STRIPE_TEST: "STRIPE_TEST"
+    STRIPE_TEST: "STRIPE_TEST",
+    ZALOPAY_TEST: "ZALOPAY_TEST"
 };
 
 export const REFUND_METHOD = {
@@ -39,7 +40,8 @@ export const STATUS_ACTOR = {
     USER: "USER",
     ADMIN: "ADMIN",
     SYSTEM: "SYSTEM",
-    STRIPE: "STRIPE"
+    STRIPE: "STRIPE",
+    ZALOPAY: "ZALOPAY"
 };
 
 export const PAYMENT_HOLD_MINUTES = 30;

@@ -5,6 +5,7 @@ import Show from "../models/Show.js";
 import {
     BOOKING_STATUS,
     PAYMENT_HOLD_MINUTES,
+    PAYMENT_PROVIDER,
     PAYMENT_STATUS,
     STATUS_ACTOR,
     appendBookingHistory,
@@ -14,6 +15,7 @@ import {
     markBookingAsCancelled,
     releaseSeats
 } from "../services/bookingService.js";
+import { createZaloPayPayment } from "../services/zalopayService.js";
 import { getPaidSeatCount, getShowtimeLifecycle, SHOWTIME_STATUS } from "../services/showtimeService.js";
 import { debitWallet, getOrCreateWallet, reverseWalletDebit } from "../services/walletService.js";
 
@@ -170,6 +172,16 @@ const buildCheckoutLineItems = (booking) => {
     return lineItems;
 };
 
+const normalizePaymentProvider = (value) => {
+    const normalized = `${value || ""}`.trim().toUpperCase();
+
+    if (normalized === "ZALOPAY" || normalized === PAYMENT_PROVIDER.ZALOPAY_TEST) {
+        return PAYMENT_PROVIDER.ZALOPAY_TEST;
+    }
+
+    return PAYMENT_PROVIDER.STRIPE_TEST;
+};
+
 export const createBooking = async (req, res) => {
     let booking = null;
     let debitedWalletAmount = 0;
@@ -177,6 +189,7 @@ export const createBooking = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
         const { showId, selectedSeats, concessions = [], useWallet = false } = req.body;
+        const selectedPaymentProvider = normalizePaymentProvider(req.body?.paymentProvider);
         const { origin } = req.headers;
 
         const normalizedSeats = validateSelectedSeats(selectedSeats);
@@ -204,6 +217,7 @@ export const createBooking = async (req, res) => {
 
         booking = await Booking.create({
             ...snapshot,
+            paymentProvider: selectedPaymentProvider,
             walletAmountUsed,
             stripeAmount,
             bookingStatus: BOOKING_STATUS.PENDING_PAYMENT,
@@ -268,6 +282,48 @@ export const createBooking = async (req, res) => {
             });
         }
 
+        if (selectedPaymentProvider === PAYMENT_PROVIDER.ZALOPAY_TEST) {
+            const zalopayPayment = await createZaloPayPayment({
+                booking,
+                amount: stripeAmount,
+                appUser: userId
+            });
+
+            booking.paymentLink = zalopayPayment.order_url;
+            booking.zalopayAppTransId = zalopayPayment.appTransId;
+            booking.zalopayZpTransToken = zalopayPayment.zp_trans_token || "";
+            booking.zalopayOrderToken = zalopayPayment.order_token || "";
+            booking.zalopayQrCode = zalopayPayment.qr_code || "";
+            booking.zalopayReturnCode = Number(zalopayPayment.return_code);
+            booking.zalopayReturnMessage = zalopayPayment.return_message || "";
+            booking.zalopayRawResponse = zalopayPayment;
+            appendBookingHistory(booking, {
+                status: booking.bookingStatus,
+                paymentStatus: booking.paymentStatus,
+                actor: STATUS_ACTOR.SYSTEM,
+                note: `Tao phien thanh toan ZaloPay, het han sau ${PAYMENT_HOLD_MINUTES} phut.`
+            });
+            await booking.save();
+
+            await inngest.send({
+                name: "app/checkpayment",
+                data: {
+                    bookingId: booking._id.toString(),
+                    expiresAt: booking.expiresAt.toISOString()
+                }
+            });
+
+            return res.json({
+                success: true,
+                url: zalopayPayment.order_url,
+                bookingCode: booking.bookingCode,
+                walletAmountUsed,
+                stripeAmount,
+                paymentProvider: selectedPaymentProvider,
+                expiresAt: booking.expiresAt
+            });
+        }
+
         const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
         const lineItems = buildCheckoutLineItems(booking);
         const walletDiscount = walletAmountUsed > 0
@@ -319,6 +375,7 @@ export const createBooking = async (req, res) => {
             bookingCode: booking.bookingCode,
             walletAmountUsed,
             stripeAmount,
+            paymentProvider: selectedPaymentProvider,
             expiresAt: booking.expiresAt
         });
     } catch (error) {

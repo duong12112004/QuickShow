@@ -18,6 +18,7 @@ import {
 } from "../services/bookingService.js";
 import { getShowtimeLifecycle } from "../services/showtimeService.js";
 import { getWalletSummary } from "../services/walletService.js";
+import { queryZaloPayOrder } from "../services/zalopayService.js";
 
 const ensureAuthenticatedUser = (req) => {
     const userId = req.auth?.()?.userId;
@@ -146,6 +147,69 @@ export const confirmMyBookingPayment = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
         const sessionId = `${req.body?.sessionId || ""}`.trim();
+        const zalopayAppTransId = `${req.body?.zalopayAppTransId || req.body?.appTransId || ""}`.trim();
+
+        if (zalopayAppTransId) {
+            const booking = await Booking.findOne({
+                user: userId,
+                zalopayAppTransId
+            });
+
+            if (!booking) {
+                return res.json({ success: false, message: "Khong tim thay booking ZaloPay cua ban." });
+            }
+
+            const queryResult = await queryZaloPayOrder(zalopayAppTransId);
+            booking.zalopayRawResponse = {
+                ...(booking.zalopayRawResponse || {}),
+                queryResult
+            };
+
+            if (Number(queryResult?.return_code) !== 1) {
+                await booking.save();
+
+                return res.json({
+                    success: true,
+                    updated: false,
+                    message: queryResult?.return_message || "ZaloPay chua xac nhan thanh toan thanh cong cho booking nay."
+                });
+            }
+
+            const paidAmount = Number(queryResult.amount || 0);
+            const expectedAmount = Number(booking.stripeAmount || 0);
+
+            if (paidAmount !== expectedAmount) {
+                await booking.save();
+
+                return res.json({
+                    success: false,
+                    message: "So tien ZaloPay tra ve khong khop voi booking."
+                });
+            }
+
+            booking.zalopayZpTransId = `${queryResult.zp_trans_id || booking.zalopayZpTransId || ""}`;
+
+            await confirmBookingPaid(booking, {
+                actor: STATUS_ACTOR.ZALOPAY,
+                note: "Nguoi dung quay lai tu ZaloPay va he thong truy van trang thai thanh toan thanh cong."
+            });
+
+            await inngest.send({
+                name: "app/show.booked",
+                data: { bookingId: booking._id.toString() }
+            });
+
+            const io = req.app.get("io");
+            if (io) {
+                io.to(booking.show.toString()).emit("seats_booked_successfully", booking.bookedSeats);
+            }
+
+            return res.json({
+                success: true,
+                updated: true,
+                message: "Da dong bo trang thai thanh toan ZaloPay thanh cong."
+            });
+        }
 
         if (!sessionId) {
             return res.json({ success: false, message: "Thiếu mã phiên thanh toán Stripe." });

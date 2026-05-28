@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import Loading from '../components/Loading'
-import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, InfoIcon, MapPinIcon, MinusIcon, PlusIcon, PopcornIcon, TicketIcon, WalletIcon, XIcon } from 'lucide-react'
+import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, CreditCardIcon, InfoIcon, MapPinIcon, MinusIcon, PlusIcon, PopcornIcon, QrCodeIcon, TicketIcon, WalletIcon, XIcon } from 'lucide-react'
 import isoTimeFormat from '../lib/isoTimeFormat'
 import timeFormat from '../lib/timeFormat'
 import toast from 'react-hot-toast'
@@ -25,6 +25,10 @@ const getSeatTypeLabel = (seatType) => {
 const formatMoney = (value, currency) => `${Number(value || 0).toLocaleString()} ${currency}`
 const MAX_CONCESSION_PER_ITEM = 3
 const MAX_CONCESSION_TOTAL = 10
+const paymentMethods = [
+  { value: 'STRIPE', label: 'Stripe', description: 'Thẻ quốc tế', Icon: CreditCardIcon },
+  { value: 'ZALOPAY', label: 'ZaloPay', description: 'Ví ZaloPay sandbox', Icon: QrCodeIcon }
+]
 
 // Component hiển thị sơ đồ ghế ngồi và xử lý luồng đặt vé Real-time
 const SeatLayout = () => {
@@ -41,6 +45,7 @@ const SeatLayout = () => {
   const [roomData, setRoomData] = useState(null) 
   const [basePrice, setBasePrice] = useState(0)
   const [useWallet, setUseWallet] = useState(true)
+  const [paymentProvider, setPaymentProvider] = useState('STRIPE')
   const [concessions, setConcessions] = useState([])
   const [concessionQuantities, setConcessionQuantities] = useState({})
   const [isConcessionModalOpen, setIsConcessionModalOpen] = useState(false)
@@ -175,7 +180,8 @@ const SeatLayout = () => {
           concessionId: item._id,
           quantity: item.quantity
         })),
-        useWallet
+        useWallet,
+        paymentProvider
       }, {
         headers: { Authorization: `Bearer ${await getToken()}` }
       })
@@ -309,6 +315,7 @@ const SeatLayout = () => {
   const totalPrice = ticketTotal + concessionTotal
   const walletAmountUsed = useWallet ? Math.min(walletBalance, totalPrice) : 0
   const stripeAmount = Math.max(totalPrice - walletAmountUsed, 0)
+  const paymentProviderLabel = paymentProvider === 'ZALOPAY' ? 'ZaloPay' : 'Stripe'
   const movie = show?.movie
   const movieTitle = movie?.title || movie?.original_title || 'Phim đang chiếu'
   const selectedShowDate = selectedTime?.time
@@ -605,10 +612,40 @@ const SeatLayout = () => {
               {useWallet && walletAmountUsed > 0 && (
                 <div className='mt-3 space-y-1 border-t border-white/10 pt-3 text-xs'>
                   <p className='flex justify-between'><span>Trừ từ ví</span><span>{formatMoney(walletAmountUsed, currency)}</span></p>
-                  <p className='flex justify-between'><span>Còn thanh toán Stripe</span><span>{formatMoney(stripeAmount, currency)}</span></p>
+                  <p className='flex justify-between'><span>Còn thanh toán {paymentProviderLabel}</span><span>{formatMoney(stripeAmount, currency)}</span></p>
                 </div>
               )}
             </div>
+
+            {stripeAmount > 0 && (
+              <div className='mt-4 rounded-xl border border-white/10 bg-black/15 p-3'>
+                <p className='mb-3 text-xs font-medium uppercase tracking-[0.2em] text-primary/80'>Phương thức thanh toán</p>
+                <div className='grid grid-cols-2 gap-2'>
+                  {paymentMethods.map(({ value, label, description, Icon }) => {
+                    const isSelected = paymentProvider === value
+
+                    return (
+                      <button
+                        key={value}
+                        type='button'
+                        onClick={() => setPaymentProvider(value)}
+                        className={`flex min-h-20 flex-col items-start justify-center rounded-xl border px-3 py-3 text-left transition ${
+                          isSelected
+                            ? 'border-primary bg-primary/15 text-white'
+                            : 'border-white/10 bg-white/5 text-gray-300 hover:border-primary/40'
+                        }`}
+                      >
+                        <span className='flex items-center gap-2 text-sm font-medium'>
+                          <Icon className='h-4 w-4 text-primary' />
+                          {label}
+                        </span>
+                        <span className='mt-1 text-xs text-gray-400'>{description}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className='mt-4 space-y-2 border-t border-white/10 pt-4'>
               <p className='flex justify-between'><span>Tiền vé</span><span>{formatMoney(ticketTotal, currency)}</span></p>
@@ -625,7 +662,7 @@ const SeatLayout = () => {
             </div>
 
             <button onClick={bookTickets} className='mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium transition hover:bg-primary-dull active:scale-95'>
-              {stripeAmount === 0 && selectedSeats.length > 0 ? 'Thanh toán bằng ví' : 'Tiến hành thanh toán'}
+              {stripeAmount === 0 && selectedSeats.length > 0 ? 'Thanh toán bằng ví' : `Thanh toán qua ${paymentProviderLabel}`}
               <ArrowRightIcon strokeWidth={3} className='h-4 w-4' />
             </button>
           </aside>

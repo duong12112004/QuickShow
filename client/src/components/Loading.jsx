@@ -12,13 +12,15 @@ const Loading = () => {
     let cancelled = false;
     let timer;
 
-    const syncStripePaymentAndNavigate = async () => {
+    const syncPaymentAndNavigate = async () => {
       const sessionId = searchParams.get('session_id');
+      const zalopayAppTransId = searchParams.get('apptransid') || searchParams.get('app_trans_id');
 
-      if (sessionId && user) {
+      if ((sessionId || zalopayAppTransId) && user) {
         try {
           await axios.post('/api/user/bookings/confirm-payment', {
-            sessionId
+            sessionId,
+            zalopayAppTransId
           }, {
             headers: { Authorization: `Bearer ${await getToken()}` }
           });
@@ -34,7 +36,7 @@ const Loading = () => {
       }
     };
 
-    syncStripePaymentAndNavigate();
+    syncPaymentAndNavigate();
 
     return () => {
       cancelled = true;

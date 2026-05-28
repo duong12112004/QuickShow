@@ -371,6 +371,7 @@ const MyBookings = () => {
             const bookingStatus = getBookingStatusUi(item.bookingStatus);
             const paymentStatus = getPaymentStatusUi(item.paymentStatus);
             const canPay = item.bookingStatus === 'PENDING_PAYMENT' && item.paymentStatus === 'UNPAID' && item.paymentLink;
+            const paymentProviderLabel = item.paymentProvider === 'ZALOPAY_TEST' ? 'ZaloPay' : 'Stripe';
             const canCancel = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID';
             const canShowQr = item.bookingStatus === 'CONFIRMED' && item.paymentStatus === 'PAID' && item.isPaid;
             const posterPath = item.show?.movie?.poster_path || item.show?.poster_path;
@@ -457,6 +458,9 @@ const MyBookings = () => {
                       {item.walletAmountUsed > 0 && (
                         <p><span className='text-gray-400'>Đã dùng ví:</span> {item.walletAmountUsed.toLocaleString()} {currency}</p>
                       )}
+                      {item.stripeAmount > 0 && (
+                        <p><span className='text-gray-400'>Thanh toán qua:</span> {paymentProviderLabel}</p>
+                      )}
                       {item.checkedInAt && (
                         <p><span className='text-gray-400'>Check-in lúc:</span> {dateFormat(item.checkedInAt)}</p>
                       )}
@@ -484,7 +488,7 @@ const MyBookings = () => {
                         href={item.paymentLink}
                         className='inline-flex justify-center rounded-full bg-primary px-5 py-2 text-sm font-medium text-white transition hover:bg-primary-dull'
                       >
-                        Thanh toán ngay
+                        Thanh toán qua {paymentProviderLabel}
                       </a>
                     )}
 

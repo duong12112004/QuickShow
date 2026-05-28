@@ -640,7 +640,9 @@ const ListBookings = () => {
                       <p className='mt-1 text-xs text-gray-400'>Ví: {item.walletAmountUsed.toLocaleString()} {currency}</p>
                     )}
                     {item.stripeAmount > 0 && (
-                      <p className='mt-1 text-xs text-gray-400'>Stripe: {item.stripeAmount.toLocaleString()} {currency}</p>
+                      <p className='mt-1 text-xs text-gray-400'>
+                        {item.paymentProvider === 'ZALOPAY_TEST' ? 'ZaloPay' : 'Stripe'}: {item.stripeAmount.toLocaleString()} {currency}
+                      </p>
                     )}
                   </td>
                   <td className='p-3'>

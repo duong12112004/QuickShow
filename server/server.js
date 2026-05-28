@@ -13,6 +13,7 @@ import userRouter from './routes/userRoutes.js';
 import reviewRouter from './routes/reviewRoutes.js';
 import concessionRouter from './routes/concessionRoutes.js';
 import { stripeWebhooks } from './controllers/stripeWebhooks.js';
+import { zalopayCallback } from './controllers/zalopayController.js';
 
 // Import HTTP và hàm khởi tạo Socket đã tách file
 import { createServer } from 'http'; 
@@ -35,6 +36,7 @@ app.use('/api/stripe', express.raw({ type: 'application/json' }), stripeWebhooks
 // Middleware
 app.use(express.json())
 app.use(cors())
+app.post('/api/zalopay/callback', zalopayCallback)
 app.use(clerkMiddleware())
 
 // API Routes
