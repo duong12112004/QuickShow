@@ -57,6 +57,8 @@ const serializeReview = (review) => ({
     rating: review.rating,
     isVerifiedViewer: review.isVerifiedViewer,
     status: review.status,
+    hiddenAt: review.hiddenAt,
+    hiddenBy: review.hiddenBy,
     hiddenReason: review.hiddenReason,
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,

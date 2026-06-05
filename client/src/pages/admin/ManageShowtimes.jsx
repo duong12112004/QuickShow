@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   CalendarPlus,
   CirclePause,
+  Eye,
   PenSquare,
   PlusCircle,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import AdminPagination from '../../components/admin/AdminPagination'
+import ShowtimeDetailsModal from '../../components/admin/ShowtimeDetailsModal'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
 import { dateFormat, formatToDateTimeLocal, getCurrentDateTimeLocal } from '../../lib/dateFormat'
@@ -90,6 +92,7 @@ const ManageShowtimes = () => {
   const [nowPlayingMovies, setNowPlayingMovies] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
+  const [selectedShowtimeId, setSelectedShowtimeId] = useState('')
 
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -224,6 +227,10 @@ const ManageShowtimes = () => {
 
   const selectedMovie = movieOptions.find((movie) => movie._id === String(selectedMovieId))
   const editSelectedRoom = rooms.find((room) => room._id === editForm.roomId)
+  const selectedShowtime = useMemo(
+    () => showtimes.find((showtime) => showtime._id === selectedShowtimeId) || null,
+    [showtimes, selectedShowtimeId]
+  )
 
   const stats = useMemo(() => ({
     total: showtimes.length,
@@ -621,6 +628,15 @@ const ManageShowtimes = () => {
                   <td className='p-3'>
                     <div className='flex flex-wrap justify-end gap-2'>
                       <button
+                        type='button'
+                        onClick={() => setSelectedShowtimeId(showtime._id)}
+                        className='inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 px-3 py-1.5 text-xs text-violet-300 transition hover:bg-violet-500/10'
+                      >
+                        <Eye className='h-3.5 w-3.5' />
+                        Chi tiết
+                      </button>
+                      <button
+                        type='button'
                         onClick={() => openEditModal(showtime)}
                         disabled={!canEdit}
                         className='inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40'
@@ -629,6 +645,7 @@ const ManageShowtimes = () => {
                         Sửa
                       </button>
                       <button
+                        type='button'
                         onClick={() => {
                           setCancelTarget(showtime)
                           setCancelReason(showtime.cancellationReason || '')
@@ -640,6 +657,7 @@ const ManageShowtimes = () => {
                         Hủy
                       </button>
                       <button
+                        type='button'
                         onClick={() => setDeleteTarget(showtime)}
                         disabled={!canDelete}
                         className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40'
@@ -666,6 +684,28 @@ const ManageShowtimes = () => {
         onPageChange={setCurrentPage}
         disabled={filteredShowtimes.length === 0}
       />
+
+      {selectedShowtime && (
+        <ShowtimeDetailsModal
+          showtime={selectedShowtime}
+          currency={currency}
+          imageBaseUrl={image_base_url}
+          onClose={() => setSelectedShowtimeId('')}
+          onEdit={(showtime) => {
+            setSelectedShowtimeId('')
+            openEditModal(showtime)
+          }}
+          onCancel={(showtime) => {
+            setSelectedShowtimeId('')
+            setCancelTarget(showtime)
+            setCancelReason(showtime.cancellationReason || '')
+          }}
+          onDelete={(showtime) => {
+            setSelectedShowtimeId('')
+            setDeleteTarget(showtime)
+          }}
+        />
+      )}
 
       {createModalOpen && (
         <div className='fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6'>

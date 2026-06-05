@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import AdminPagination from '../../components/admin/AdminPagination'
+import ReviewDetailsModal from '../../components/admin/ReviewDetailsModal'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
 
@@ -77,6 +78,7 @@ const ManageReviews = () => {
   const [isFetching, setIsFetching] = useState(false)
   const [processingId, setProcessingId] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [selectedReviewId, setSelectedReviewId] = useState('')
 
   const fetchReviews = useCallback(async (nextFilters, options = {}) => {
     const { silent = false } = options
@@ -208,6 +210,10 @@ const ManageReviews = () => {
   }, [currentPage, filteredReviews])
   const startRow = filteredReviews.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
   const endRow = Math.min(currentPage * PAGE_SIZE, filteredReviews.length)
+  const selectedReview = useMemo(
+    () => reviews.find((review) => review._id === selectedReviewId) || null,
+    [reviews, selectedReviewId]
+  )
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -310,16 +316,16 @@ const ManageReviews = () => {
       </div>
 
       <div className='overflow-x-auto rounded-2xl border border-primary/20 bg-primary/8'>
-        <table className='w-full min-w-[1300px] border-collapse text-left text-sm'>
+        <table className='w-full min-w-[1180px] table-fixed border-collapse text-left text-sm'>
           <thead>
             <tr className='border-b border-primary/20 bg-primary/12 text-white'>
-              <th className='p-3 pl-5 font-medium'>Phim / booking</th>
-              <th className='p-3 font-medium'>Người dùng</th>
-              <th className='p-3 font-medium'>Điểm</th>
-              <th className='p-3 font-medium'>Nội dung</th>
-              <th className='p-3 font-medium'>Trạng thái</th>
-              <th className='p-3 font-medium'>Thời gian</th>
-              <th className='p-3 font-medium text-right'>Thao tác</th>
+              <th className='w-[260px] p-3 pl-5 font-medium'>Phim / booking</th>
+              <th className='w-[190px] p-3 font-medium'>Người dùng</th>
+              <th className='w-[110px] p-3 font-medium'>Điểm</th>
+              <th className='w-[300px] p-3 font-medium'>Nội dung</th>
+              <th className='w-[125px] p-3 font-medium'>Trạng thái</th>
+              <th className='w-[155px] p-3 font-medium'>Thời gian</th>
+              <th className='w-[180px] p-3 font-medium text-right'>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -336,7 +342,7 @@ const ManageReviews = () => {
               return (
                 <tr key={review._id} className='border-b border-primary/15 align-top even:bg-white/2 last:border-0'>
                   <td className='p-3 pl-5'>
-                    <div className='flex gap-3'>
+                    <div className='flex max-w-[235px] gap-3'>
                       {posterPath ? (
                         <img
                           src={image_base_url + posterPath}
@@ -348,8 +354,8 @@ const ManageReviews = () => {
                           No poster
                         </div>
                       )}
-                      <div className='min-w-0'>
-                        <p className='line-clamp-2 font-medium text-white'>{movieTitle}</p>
+                      <div className='min-w-0 flex-1'>
+                        <p className='line-clamp-2 break-words font-medium text-white'>{movieTitle}</p>
                         {review.booking?.bookingCode && (
                           <p className='mt-1 text-xs font-semibold text-primary'>{review.booking.bookingCode}</p>
                         )}
@@ -358,7 +364,7 @@ const ManageReviews = () => {
                           <p className='mt-1 text-xs text-gray-400'>{formatDateTime(showDateTime)}</p>
                         )}
                         {review.booking?.bookedSeats?.length > 0 && (
-                          <p className='mt-1 max-w-64 truncate text-xs text-gray-400'>
+                          <p className='mt-1 max-w-full truncate text-xs text-gray-400'>
                             Ghế: {review.booking.bookedSeats.join(', ')}
                           </p>
                         )}
@@ -375,8 +381,8 @@ const ManageReviews = () => {
                           {review.userName?.charAt(0) || 'Q'}
                         </div>
                       )}
-                      <div className='min-w-0'>
-                        <p className='line-clamp-2 wrap-break-word font-medium text-white'>{review.userName || 'Người dùng QuickShow'}</p>
+                      <div className='min-w-0 flex-1'>
+                        <p className='line-clamp-2 break-words font-medium text-white'>{review.userName || 'Người dùng QuickShow'}</p>
                         <p className='mt-1 text-xs text-gray-400'>{getReviewType(review)}</p>
                         {review.isVerifiedViewer && (
                           <p className='mt-1 inline-flex items-center gap-1 text-xs text-emerald-300'>
@@ -411,7 +417,7 @@ const ManageReviews = () => {
 
                   <td className='p-3'>
                     {review.comment?.trim() ? (
-                      <p className='line-clamp-5 max-w-[420px] whitespace-pre-line wrap-break-word text-gray-300'>
+                      <p className='line-clamp-4 max-w-[280px] whitespace-pre-line break-words text-gray-300'>
                         {review.comment}
                       </p>
                     ) : (
@@ -433,7 +439,7 @@ const ManageReviews = () => {
                     </div>
 
                     {review.hiddenReason && (
-                      <p className='mt-2 max-w-[420px] rounded-lg border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-xs text-rose-200'>
+                      <p className='mt-2 max-w-[280px] truncate rounded-lg border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-xs text-rose-200'>
                         Lý do ẩn: {review.hiddenReason}
                       </p>
                     )}
@@ -458,12 +464,21 @@ const ManageReviews = () => {
                   </td>
 
                   <td className='p-3 text-right'>
+                    <div className='flex flex-nowrap items-center justify-end gap-2'>
+                      <button
+                        type='button'
+                        onClick={() => setSelectedReviewId(review._id)}
+                        className='inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-400/40 px-3 py-2 text-xs font-medium text-violet-200 transition hover:bg-violet-500/10'
+                      >
+                        <EyeIcon className='h-4 w-4' />
+                        Chi tiết
+                      </button>
                     {review.status === 'VISIBLE' ? (
                       <button
                         type='button'
                         onClick={() => handleHideReview(review)}
                         disabled={processingId === review._id}
-                        className='inline-flex items-center gap-2 rounded-full border border-rose-400/40 px-4 py-2 text-xs font-medium text-rose-200 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60'
+                        className='inline-flex shrink-0 items-center gap-1.5 rounded-full border border-rose-400/40 px-3 py-2 text-xs font-medium text-rose-200 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                       >
                         <EyeOffIcon className='h-4 w-4' />
                         Ẩn
@@ -473,12 +488,13 @@ const ManageReviews = () => {
                         type='button'
                         onClick={() => handleRestoreReview(review)}
                         disabled={processingId === review._id}
-                        className='inline-flex items-center gap-2 rounded-full border border-emerald-400/40 px-4 py-2 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60'
+                        className='inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/40 px-3 py-2 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                       >
                         <RotateCcwIcon className='h-4 w-4' />
                         Khôi phục
                       </button>
                     )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -499,6 +515,17 @@ const ManageReviews = () => {
         onPageChange={setCurrentPage}
         disabled={filteredReviews.length === 0}
       />
+
+      {selectedReview && (
+        <ReviewDetailsModal
+          review={selectedReview}
+          imageBaseUrl={image_base_url}
+          processing={processingId === selectedReview._id}
+          onClose={() => setSelectedReviewId('')}
+          onHide={handleHideReview}
+          onRestore={handleRestoreReview}
+        />
+      )}
     </div>
   )
 }

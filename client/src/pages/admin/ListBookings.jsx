@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ClipboardCopy,
   Download,
+  Eye,
   FilterX,
   ImageUp,
   QrCode,
@@ -13,6 +14,7 @@ import {
 import { Html5Qrcode } from 'html5-qrcode';
 import toast from 'react-hot-toast';
 import AdminPagination from '../../components/admin/AdminPagination';
+import BookingDetailsModal from '../../components/admin/BookingDetailsModal';
 import Title from '../../components/admin/Title';
 import { dateFormat } from '../../lib/dateFormat';
 import { useAppContext } from '../../context/AppContext';
@@ -61,6 +63,7 @@ const ListBookings = () => {
   const [scannerStatus, setScannerStatus] = useState('');
   const [lastCheckInResult, setLastCheckInResult] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedBookingId, setSelectedBookingId] = useState('');
   const [filters, setFilters] = useState({
     q: '',
     bookingStatus: '',
@@ -115,6 +118,10 @@ const ListBookings = () => {
   }, [bookings, currentPage]);
   const startRow = bookings.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const endRow = Math.min(currentPage * PAGE_SIZE, bookings.length);
+  const selectedBooking = useMemo(
+    () => bookings.find((booking) => booking._id === selectedBookingId) || null,
+    [bookings, selectedBookingId]
+  );
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -576,7 +583,21 @@ const ListBookings = () => {
               return (
                 <tr key={item._id} className='border-b border-primary/15 align-top even:bg-white/2'>
                   <td className='p-3 pl-5'>
-                    <div className='font-semibold text-white'>{item.bookingCode}</div>
+                    <div className='flex items-center gap-2'>
+                      <div className='font-semibold text-white'>{item.bookingCode}</div>
+                      <button
+                        type='button'
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(item.bookingCode);
+                          toast.success('Đã sao chép mã booking.');
+                        }}
+                        className='rounded-lg border border-white/10 p-1.5 text-gray-400 transition hover:border-sky-400/40 hover:bg-sky-500/10 hover:text-sky-300'
+                        aria-label={`Sao chép mã booking ${item.bookingCode}`}
+                        title='Sao chép mã booking'
+                      >
+                        <ClipboardCopy className='h-3.5 w-3.5' />
+                      </button>
+                    </div>
                     <div className='mt-1 text-xs text-gray-400'>Tạo lúc: {dateFormat(item.createdAt)}</div>
                   </td>
                   <td className='p-3'>
@@ -648,14 +669,16 @@ const ListBookings = () => {
                   <td className='p-3'>
                     <div className='flex flex-col gap-2'>
                       <button
-                        onClick={() => navigator.clipboard.writeText(item.bookingCode)}
-                        className='inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs font-medium text-gray-200 transition hover:bg-white/5'
+                        type='button'
+                        onClick={() => setSelectedBookingId(item._id)}
+                        className='inline-flex items-center justify-center gap-2 rounded-full border border-sky-400/40 bg-sky-500/5 px-4 py-2 text-xs font-medium text-sky-200 transition hover:bg-sky-500/15 hover:text-sky-100'
                       >
-                        <ClipboardCopy className='h-3.5 w-3.5' />
-                        Sao chép mã
+                        <Eye className='h-3.5 w-3.5' />
+                        Xem chi tiết
                       </button>
                       {canCancel && (
                         <button
+                          type='button'
                           onClick={() => handleCancelBooking(item._id)}
                           className='inline-flex items-center justify-center gap-2 rounded-full border border-rose-400/40 px-4 py-2 text-xs font-medium text-rose-200 transition hover:bg-rose-500/10'
                         >
@@ -684,6 +707,16 @@ const ListBookings = () => {
         onPageChange={setCurrentPage}
         disabled={bookings.length === 0}
       />
+
+      {selectedBooking && (
+        <BookingDetailsModal
+          booking={selectedBooking}
+          currency={currency}
+          imageBaseUrl={image_base_url}
+          onClose={() => setSelectedBookingId('')}
+          onCancel={handleCancelBooking}
+        />
+      )}
     </div>
   );
 };
