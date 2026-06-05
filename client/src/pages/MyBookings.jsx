@@ -45,7 +45,7 @@ const initialReviewForm = {
 };
 
 const MyBookings = () => {
-  const { axios, getToken, user, image_base_url, wallet, fetchWallet, fetchShows } = useAppContext();
+  const { axios, getToken, user, image_base_url, fetchWallet, fetchShows } = useAppContext();
   const currency = import.meta.env.VITE_CURRENCY;
 
   const [bookings, setBookings] = useState([]);
@@ -201,7 +201,7 @@ const MyBookings = () => {
 
   useEffect(() => {
     if (user) {
-      Promise.all([getMyBookings(), fetchWallet()]);
+      getMyBookings();
     }
   }, [user]);
 
@@ -280,18 +280,6 @@ const MyBookings = () => {
           <p className='max-w-2xl text-sm text-gray-400'>
             Theo dõi trạng thái vé, thanh toán, hoàn tiền và check-in của từng booking tại đây.
           </p>
-        </div>
-
-        <div className='mb-8 rounded-2xl border border-primary/20 bg-primary/8 p-5'>
-          <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
-            <div>
-              <p className='text-sm text-gray-400'>Ví QuickShow</p>
-              <p className='mt-2 text-2xl font-semibold text-primary'>{(wallet.balance || 0).toLocaleString()} {currency}</p>
-            </div>
-            <p className='max-w-xl text-sm text-gray-300'>
-              Tiền hoàn từ vé tự hủy sẽ được cộng vào ví và có thể dùng để trừ trực tiếp khi đặt vé tiếp theo.
-            </p>
-          </div>
         </div>
 
         {!bookings.length && (

@@ -101,7 +101,16 @@ export const getUserBookings = async (req, res) => {
 export const getMyWallet = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
-        const wallet = await getWalletSummary(userId);
+        const type = `${req.query?.type || ""}`.trim().toUpperCase();
+        const status = `${req.query?.status || ""}`.trim().toUpperCase();
+        const allowedTypes = ["CREDIT", "DEBIT", "REVERSAL"];
+        const allowedStatuses = ["COMPLETED", "FAILED"];
+        const wallet = await getWalletSummary(userId, {
+            page: req.query?.page,
+            limit: req.query?.limit,
+            type: allowedTypes.includes(type) ? type : "",
+            status: allowedStatuses.includes(status) ? status : ""
+        });
 
         res.json({ success: true, wallet });
     } catch (error) {

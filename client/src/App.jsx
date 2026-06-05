@@ -17,6 +17,7 @@ import ManageRooms from './pages/admin/ManageRooms'
 import ManageShowtimes from './pages/admin/ManageShowtimes'
 import ManageReviews from './pages/admin/ManageReviews'
 import ManageConcessions from './pages/admin/ManageConcessions'
+import WalletHistory from './pages/WalletHistory'
 
 import { SignIn } from '@clerk/clerk-react'
 import { useAppContext } from './context/AppContext'
@@ -37,6 +38,7 @@ const App = () => {
         <Route path='/movies/:id' element={<MovieDetails />} />
         <Route path='/movies/:id/:date' element={<SeatLayout />} />
         <Route path='/my-bookings' element={<MyBookings />} />
+        <Route path='/wallet' element={<WalletHistory />} />
         <Route path='/loading/:nextUrl' element={<Loading />} />
         <Route path='/favorite' element={<Favorite />} />
         <Route path='/admin/*' element={user ? <Layout /> :(

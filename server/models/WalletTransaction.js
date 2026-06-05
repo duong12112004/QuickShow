@@ -15,5 +15,7 @@ const walletTransactionSchema = new mongoose.Schema({
     metadata: { type: Object, default: {} }
 }, { minimize: false, timestamps: true });
 
+walletTransactionSchema.index({ user: 1, createdAt: -1 });
+
 const WalletTransaction = mongoose.model("WalletTransaction", walletTransactionSchema);
 export default WalletTransaction;

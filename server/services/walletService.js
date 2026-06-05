@@ -17,17 +17,44 @@ export const getOrCreateWallet = async (userId) => {
     return wallet;
 };
 
-export const getWalletSummary = async (userId, transactionLimit = 8) => {
+export const getWalletSummary = async (userId, {
+    page = 1,
+    limit = 8,
+    type = "",
+    status = ""
+} = {}) => {
     const wallet = await getOrCreateWallet(userId);
-    const transactions = await WalletTransaction.find({ user: userId })
-        .sort({ createdAt: -1 })
-        .limit(transactionLimit)
-        .populate("booking", "bookingCode movieTitle amount refundAmount refundFeeAmount");
+    const normalizedPage = Math.max(Number.parseInt(page, 10) || 1, 1);
+    const normalizedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 8, 1), 50);
+    const query = { user: userId };
+
+    if (type) {
+        query.type = type;
+    }
+
+    if (status) {
+        query.status = status;
+    }
+
+    const [transactions, totalTransactions] = await Promise.all([
+        WalletTransaction.find(query)
+            .sort({ createdAt: -1 })
+            .skip((normalizedPage - 1) * normalizedLimit)
+            .limit(normalizedLimit)
+            .populate("booking", "bookingCode movieTitle amount refundAmount refundFeeAmount"),
+        WalletTransaction.countDocuments(query)
+    ]);
 
     return {
         balance: wallet.balance || 0,
         currency: wallet.currency || "VND",
-        transactions
+        transactions,
+        pagination: {
+            page: normalizedPage,
+            limit: normalizedLimit,
+            totalTransactions,
+            totalPages: Math.max(Math.ceil(totalTransactions / normalizedLimit), 1)
+        }
     };
 };
 

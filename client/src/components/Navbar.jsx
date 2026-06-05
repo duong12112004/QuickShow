@@ -242,7 +242,7 @@ const Navbar = () => {
           <div className='flex items-center gap-3'>
             <button
               type='button'
-              onClick={() => navigate('/my-bookings')}
+              onClick={() => navigate('/wallet')}
               className='inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-2 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/15 sm:px-3'
               title='Ví QuickShow'
             >
@@ -255,6 +255,11 @@ const Navbar = () => {
                   label='Vé của tôi'
                   labelIcon={<TicketPlus width={15} />}
                   onClick={() => navigate('/my-bookings')}
+                />
+                <UserButton.Action
+                  label='Ví QuickShow'
+                  labelIcon={<WalletIcon width={15} />}
+                  onClick={() => navigate('/wallet')}
                 />
               </UserButton.MenuItems>
             </UserButton>
