@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import AdminPagination from '../../components/admin/AdminPagination'
+import AdminReasonModal from '../../components/admin/AdminReasonModal'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
 
@@ -172,11 +173,13 @@ const ManageRooms = () => {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState('')
+  const [statusSubmittingId, setStatusSubmittingId] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [roomTypeFilter, setRoomTypeFilter] = useState('ALL')
   const [formModalOpen, setFormModalOpen] = useState(false)
+  const [maintenanceReasonTarget, setMaintenanceReasonTarget] = useState(null)
 
   const fetchRooms = async () => {
     try {
@@ -361,16 +364,13 @@ const ManageRooms = () => {
     }
   }
 
-  const handleQuickStatusUpdate = async (room, status) => {
+  const performQuickStatusUpdate = async (room, status, maintenanceNote = '') => {
+    if (status === 'MAINTENANCE' && !maintenanceNote?.trim()) {
+      return toast.error('Cần nhập lý do bảo trì.')
+    }
+
     try {
-      const maintenanceNote = status === 'MAINTENANCE'
-        ? window.prompt('Nhập lý do bảo trì cho phòng này:', room.maintenanceNote || '')
-        : ''
-
-      if (status === 'MAINTENANCE' && !maintenanceNote?.trim()) {
-        return toast.error('Cần nhập lý do bảo trì.')
-      }
-
+      setStatusSubmittingId(room._id)
       const { data } = await axios.patch(
         `/api/admin/rooms/${room._id}/status`,
         { status, maintenanceNote: maintenanceNote?.trim() || '' },
@@ -387,10 +387,22 @@ const ManageRooms = () => {
       }
 
       toast.success(data.message)
+      setMaintenanceReasonTarget(null)
       fetchRooms()
     } catch {
       toast.error('Không cập nhật được trạng thái phòng.')
+    } finally {
+      setStatusSubmittingId('')
     }
+  }
+
+  const handleQuickStatusUpdate = async (room, status) => {
+    if (status === 'MAINTENANCE') {
+      setMaintenanceReasonTarget(room)
+      return
+    }
+
+    await performQuickStatusUpdate(room, status, '')
   }
 
   const submitDeleteRoom = async () => {
@@ -571,7 +583,8 @@ const ManageRooms = () => {
                       {room.status !== 'MAINTENANCE' && (
                         <button
                           onClick={() => handleQuickStatusUpdate(room, 'MAINTENANCE')}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10'
+                          disabled={statusSubmittingId === room._id}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                         >
                           <Wrench className='h-3.5 w-3.5' />
                           Bảo trì
@@ -580,7 +593,8 @@ const ManageRooms = () => {
                       {room.status !== 'INACTIVE' && (
                         <button
                           onClick={() => handleQuickStatusUpdate(room, 'INACTIVE')}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-slate-500/30 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-500/10'
+                          disabled={statusSubmittingId === room._id}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-slate-500/30 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                         >
                           <CirclePause className='h-3.5 w-3.5' />
                           Ngừng
@@ -589,7 +603,8 @@ const ManageRooms = () => {
                       {room.status !== 'ACTIVE' && (
                         <button
                           onClick={() => handleQuickStatusUpdate(room, 'ACTIVE')}
-                          className='inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10'
+                          disabled={statusSubmittingId === room._id}
+                          className='inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                         >
                           <CheckCircle2 className='h-3.5 w-3.5' />
                           Mở lại
@@ -751,6 +766,21 @@ const ManageRooms = () => {
           </button>
         </form>
       </div>
+      )}
+
+      {maintenanceReasonTarget && (
+        <AdminReasonModal
+          title='Nhập lý do bảo trì phòng'
+          description={`Phòng ${maintenanceReasonTarget.name} sẽ chuyển sang trạng thái bảo trì và không thể xếp suất chiếu mới.`}
+          label='Lý do bảo trì'
+          placeholder='VD: Bảo trì máy chiếu, thay ghế, sửa điều hòa, kiểm tra âm thanh...'
+          initialValue={maintenanceReasonTarget.maintenanceNote || ''}
+          confirmText='Chuyển sang bảo trì'
+          variant='amber'
+          isSubmitting={statusSubmittingId === maintenanceReasonTarget._id}
+          onClose={() => setMaintenanceReasonTarget(null)}
+          onConfirm={(reason) => performQuickStatusUpdate(maintenanceReasonTarget, 'MAINTENANCE', reason)}
+        />
       )}
 
       {deleteTarget && (

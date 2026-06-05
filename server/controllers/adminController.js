@@ -1,4 +1,6 @@
 import Booking from "../models/Booking.js";
+import Concession from "../models/Concession.js";
+import MovieReview, { REVIEW_STATUS } from "../models/MovieReview.js";
 import Show from "../models/Show.js";
 import User from "../models/User.js";
 import { inngest } from "../inngest/index.js";
@@ -120,14 +122,17 @@ const formatDashboardDateLabel = (date) => {
 };
 
 const getDashboardRange = (rangeDays) => {
-    const start = getDashboardDayStart();
-    const endExclusive = new Date(start.getTime() + rangeDays * DASHBOARD_DAY_MS);
-    const upcomingStart = new Date(Math.max(Date.now(), start.getTime()));
+    const todayStart = getDashboardDayStart();
+    const start = new Date(todayStart.getTime() - (rangeDays - 1) * DASHBOARD_DAY_MS);
+    const endExclusive = new Date(todayStart.getTime() + DASHBOARD_DAY_MS);
+    const upcomingStart = new Date(Math.max(Date.now(), todayStart.getTime()));
+    const upcomingEndExclusive = new Date(todayStart.getTime() + rangeDays * DASHBOARD_DAY_MS);
 
     return {
         start,
         endExclusive,
         upcomingStart,
+        upcomingEndExclusive,
         days: Array.from({ length: rangeDays }, (_, index) => {
             const date = new Date(start.getTime() + index * DASHBOARD_DAY_MS);
             return {
@@ -428,12 +433,13 @@ export const isAdmin = async (req, res) => {
 export const getDashboardData = async (req, res) => {
     try {
         const rangeDays = parseDashboardRangeDays(req.query?.rangeDays);
-        const { start, endExclusive, upcomingStart, days } = getDashboardRange(rangeDays);
-        const rangeMatch = { showDateTime: { $gte: start, $lt: endExclusive } };
+        const { start, endExclusive, upcomingStart, upcomingEndExclusive, days } = getDashboardRange(rangeDays);
+        const bookingRangeMatch = { createdAt: { $gte: start, $lt: endExclusive } };
         const paidRangeMatch = {
             ...PAID_BOOKING_MATCH,
-            ...rangeMatch
+            ...bookingRangeMatch
         };
+        const reviewRangeMatch = { createdAt: { $gte: start, $lt: endExclusive } };
         const effectiveRefund = buildEffectiveRefundExpression();
         const walletRefund = buildWalletRefundExpression();
         const stripeRefund = buildStripeRefundExpression();
@@ -443,6 +449,11 @@ export const getDashboardData = async (req, res) => {
             revenueTrendRows,
             bookingStatusRows,
             topMovieRows,
+            [reviewSummary],
+            reviewTrendRows,
+            [concessionSummary],
+            topConcessionRows,
+            [concessionCatalogSummary],
             scheduledShows,
             totalUser
         ] = await Promise.all([
@@ -518,7 +529,7 @@ export const getDashboardData = async (req, res) => {
                         _id: {
                             $dateToString: {
                                 format: "%Y-%m-%d",
-                                date: "$showDateTime",
+                                date: "$createdAt",
                                 timezone: DASHBOARD_TIMEZONE
                             }
                         },
@@ -531,7 +542,7 @@ export const getDashboardData = async (req, res) => {
                 { $sort: { _id: 1 } }
             ]),
             Booking.aggregate([
-                { $match: paidRangeMatch },
+                { $match: bookingRangeMatch },
                 {
                     $group: {
                         _id: "$bookingStatus",
@@ -584,8 +595,152 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            MovieReview.aggregate([
+                { $match: reviewRangeMatch },
+                {
+                    $group: {
+                        _id: null,
+                        totalReviews: { $sum: 1 },
+                        visibleReviews: {
+                            $sum: { $cond: [{ $eq: ["$status", REVIEW_STATUS.VISIBLE] }, 1, 0] }
+                        },
+                        hiddenReviews: {
+                            $sum: { $cond: [{ $eq: ["$status", REVIEW_STATUS.HIDDEN] }, 1, 0] }
+                        },
+                        comments: {
+                            $sum: {
+                                $cond: [
+                                    { $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ["$comment", ""] } } } }, 0] },
+                                    1,
+                                    0
+                                ]
+                            }
+                        },
+                        ratingOnly: {
+                            $sum: {
+                                $cond: [
+                                    {
+                                        $and: [
+                                            { $ne: ["$rating", null] },
+                                            { $eq: [{ $strLenCP: { $trim: { input: { $ifNull: ["$comment", ""] } } } }, 0] }
+                                        ]
+                                    },
+                                    1,
+                                    0
+                                ]
+                            }
+                        },
+                        spoilerReviews: {
+                            $sum: { $cond: ["$hasSpoiler", 1, 0] }
+                        },
+                        verifiedReviews: {
+                            $sum: { $cond: ["$isVerifiedViewer", 1, 0] }
+                        },
+                        ratedReviews: {
+                            $sum: { $cond: [{ $ne: ["$rating", null] }, 1, 0] }
+                        },
+                        ratingTotal: {
+                            $sum: { $ifNull: ["$rating", 0] }
+                        }
+                    }
+                }
+            ]),
+            MovieReview.aggregate([
+                { $match: reviewRangeMatch },
+                {
+                    $group: {
+                        _id: {
+                            $dateToString: {
+                                format: "%Y-%m-%d",
+                                date: "$createdAt",
+                                timezone: DASHBOARD_TIMEZONE
+                            }
+                        },
+                        reviews: { $sum: 1 },
+                        comments: {
+                            $sum: {
+                                $cond: [
+                                    { $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ["$comment", ""] } } } }, 0] },
+                                    1,
+                                    0
+                                ]
+                            }
+                        },
+                        hidden: {
+                            $sum: { $cond: [{ $eq: ["$status", REVIEW_STATUS.HIDDEN] }, 1, 0] }
+                        },
+                        ratingTotal: { $sum: { $ifNull: ["$rating", 0] } },
+                        ratedReviews: {
+                            $sum: { $cond: [{ $ne: ["$rating", null] }, 1, 0] }
+                        }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            Booking.aggregate([
+                { $match: paidRangeMatch },
+                {
+                    $addFields: {
+                        concessionItemCount: {
+                            $reduce: {
+                                input: { $ifNull: ["$concessionItems", []] },
+                                initialValue: 0,
+                                in: { $add: ["$$value", { $ifNull: ["$$this.quantity", 0] }] }
+                            }
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        concessionRevenue: { $sum: { $ifNull: ["$concessionAmount", 0] } },
+                        concessionItemsSold: { $sum: "$concessionItemCount" },
+                        concessionBookings: {
+                            $sum: { $cond: [{ $gt: [{ $ifNull: ["$concessionAmount", 0] }, 0] }, 1, 0] }
+                        },
+                        ticketRevenue: { $sum: { $ifNull: ["$ticketAmount", 0] } }
+                    }
+                }
+            ]),
+            Booking.aggregate([
+                { $match: paidRangeMatch },
+                { $unwind: "$concessionItems" },
+                {
+                    $group: {
+                        _id: "$concessionItems.name",
+                        category: { $first: "$concessionItems.category" },
+                        quantity: { $sum: { $ifNull: ["$concessionItems.quantity", 0] } },
+                        revenue: { $sum: { $ifNull: ["$concessionItems.totalPrice", 0] } }
+                    }
+                },
+                { $sort: { revenue: -1, quantity: -1, _id: 1 } },
+                { $limit: 6 },
+                {
+                    $project: {
+                        _id: 0,
+                        name: "$_id",
+                        category: 1,
+                        quantity: 1,
+                        revenue: 1
+                    }
+                }
+            ]),
+            Concession.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalConcessions: { $sum: 1 },
+                        activeConcessions: {
+                            $sum: { $cond: [{ $eq: ["$status", "ACTIVE"] }, 1, 0] }
+                        },
+                        inactiveConcessions: {
+                            $sum: { $cond: [{ $eq: ["$status", "INACTIVE"] }, 1, 0] }
+                        }
+                    }
+                }
+            ]),
             Show.find({
-                showDateTime: { $gte: upcomingStart, $lt: endExclusive },
+                showDateTime: { $gte: upcomingStart, $lt: upcomingEndExclusive },
                 ...buildScheduledShowtimeFilter()
             })
                 .populate("movie")
@@ -651,6 +806,33 @@ export const getDashboardData = async (req, res) => {
             };
         });
 
+        const reviewTrendMap = new Map(
+            reviewTrendRows.map((row) => [
+                row._id,
+                {
+                    date: row._id,
+                    label: formatDashboardDateLabel(new Date(`${row._id}T00:00:00+07:00`)),
+                    reviews: row.reviews || 0,
+                    comments: row.comments || 0,
+                    hidden: row.hidden || 0,
+                    averageRating: row.ratedReviews > 0
+                        ? Number(((row.ratingTotal || 0) / row.ratedReviews).toFixed(1))
+                        : 0
+                }
+            ])
+        );
+
+        const reviewTrend = days.map((day) => (
+            reviewTrendMap.get(day.key) || {
+                date: day.key,
+                label: day.label,
+                reviews: 0,
+                comments: 0,
+                hidden: 0,
+                averageRating: 0
+            }
+        ));
+
         const grossRevenue = summary?.grossRevenue || 0;
         const totalRefunds = summary?.totalRefunds || 0;
         const walletRefunds = summary?.walletRefunds || 0;
@@ -673,6 +855,30 @@ export const getDashboardData = async (req, res) => {
             revenueTrend,
             bookingStatusBreakdown,
             topMovies: topMovieRows,
+            reviews: {
+                total: reviewSummary?.totalReviews || 0,
+                visible: reviewSummary?.visibleReviews || 0,
+                hidden: reviewSummary?.hiddenReviews || 0,
+                comments: reviewSummary?.comments || 0,
+                ratingOnly: reviewSummary?.ratingOnly || 0,
+                spoilers: reviewSummary?.spoilerReviews || 0,
+                verified: reviewSummary?.verifiedReviews || 0,
+                rated: reviewSummary?.ratedReviews || 0,
+                averageRating: reviewSummary?.ratedReviews > 0
+                    ? Number(((reviewSummary.ratingTotal || 0) / reviewSummary.ratedReviews).toFixed(1))
+                    : 0,
+                trend: reviewTrend
+            },
+            concessions: {
+                revenue: concessionSummary?.concessionRevenue || 0,
+                ticketRevenue: concessionSummary?.ticketRevenue || 0,
+                itemsSold: concessionSummary?.concessionItemsSold || 0,
+                bookings: concessionSummary?.concessionBookings || 0,
+                total: concessionCatalogSummary?.totalConcessions || 0,
+                active: concessionCatalogSummary?.activeConcessions || 0,
+                inactive: concessionCatalogSummary?.inactiveConcessions || 0,
+                topItems: topConcessionRows
+            },
             upcomingShows
         };
 

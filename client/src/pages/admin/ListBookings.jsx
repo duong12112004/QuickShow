@@ -14,6 +14,7 @@ import {
 import { Html5Qrcode } from 'html5-qrcode';
 import toast from 'react-hot-toast';
 import AdminPagination from '../../components/admin/AdminPagination';
+import AdminReasonModal from '../../components/admin/AdminReasonModal';
 import BookingDetailsModal from '../../components/admin/BookingDetailsModal';
 import Title from '../../components/admin/Title';
 import { dateFormat } from '../../lib/dateFormat';
@@ -64,6 +65,8 @@ const ListBookings = () => {
   const [lastCheckInResult, setLastCheckInResult] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedBookingId, setSelectedBookingId] = useState('');
+  const [cancelReasonTargetId, setCancelReasonTargetId] = useState('');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [filters, setFilters] = useState({
     q: '',
     bookingStatus: '',
@@ -122,6 +125,10 @@ const ListBookings = () => {
     () => bookings.find((booking) => booking._id === selectedBookingId) || null,
     [bookings, selectedBookingId]
   );
+  const cancelReasonTarget = useMemo(
+    () => bookings.find((booking) => booking._id === cancelReasonTargetId) || null,
+    [bookings, cancelReasonTargetId]
+  );
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -133,20 +140,26 @@ const ListBookings = () => {
     setCurrentPage(1);
   };
 
-  const handleCancelBooking = async (bookingId) => {
-    const cancelReason = window.prompt('Nhập lý do hủy booking:');
+  const openCancelReasonModal = (bookingId) => {
+    setCancelReasonTargetId(bookingId);
+  };
 
-    if (!cancelReason) return;
+  const handleCancelBooking = async (bookingId, cancelReason) => {
+    if (!cancelReason?.trim()) {
+      return toast.error('Vui lòng nhập lý do hủy booking.');
+    }
 
     try {
+      setCancelSubmitting(true);
       const { data } = await axios.patch(`/api/admin/bookings/${bookingId}/cancel`, {
-        cancelReason
+        cancelReason: cancelReason.trim()
       }, {
         headers: { Authorization: `Bearer ${await getToken()}` }
       });
 
       if (data.success) {
         toast.success(data.message);
+        setCancelReasonTargetId('');
         await getAllBookings(filters, { silent: true });
       } else {
         toast.error(data.message);
@@ -154,6 +167,8 @@ const ListBookings = () => {
     } catch (error) {
       console.error(error);
       toast.error('Không thể hủy booking lúc này.');
+    } finally {
+      setCancelSubmitting(false);
     }
   };
 
@@ -679,7 +694,7 @@ const ListBookings = () => {
                       {canCancel && (
                         <button
                           type='button'
-                          onClick={() => handleCancelBooking(item._id)}
+                          onClick={() => openCancelReasonModal(item._id)}
                           className='inline-flex items-center justify-center gap-2 rounded-full border border-rose-400/40 px-4 py-2 text-xs font-medium text-rose-200 transition hover:bg-rose-500/10'
                         >
                           <Ban className='h-3.5 w-3.5' />
@@ -714,7 +729,22 @@ const ListBookings = () => {
           currency={currency}
           imageBaseUrl={image_base_url}
           onClose={() => setSelectedBookingId('')}
-          onCancel={handleCancelBooking}
+          onCancel={openCancelReasonModal}
+        />
+      )}
+
+      {cancelReasonTarget && (
+        <AdminReasonModal
+          title='Nhập lý do hủy booking'
+          description={`Booking ${cancelReasonTarget.bookingCode} sẽ được hủy và xử lý hoàn tiền theo chính sách hiện tại.`}
+          label='Lý do hủy'
+          placeholder='VD: Khách yêu cầu hủy, sai suất chiếu, sự cố thanh toán...'
+          initialValue={cancelReasonTarget.cancelReason || ''}
+          confirmText='Xác nhận hủy booking'
+          variant='rose'
+          isSubmitting={cancelSubmitting}
+          onClose={() => setCancelReasonTargetId('')}
+          onConfirm={(reason) => handleCancelBooking(cancelReasonTarget._id, reason)}
         />
       )}
     </div>

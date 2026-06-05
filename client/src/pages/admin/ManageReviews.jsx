@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import AdminPagination from '../../components/admin/AdminPagination'
+import AdminReasonModal from '../../components/admin/AdminReasonModal'
 import ReviewDetailsModal from '../../components/admin/ReviewDetailsModal'
 import Title from '../../components/admin/Title'
 import { useAppContext } from '../../context/AppContext'
@@ -79,6 +80,7 @@ const ManageReviews = () => {
   const [processingId, setProcessingId] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedReviewId, setSelectedReviewId] = useState('')
+  const [hideReasonTargetId, setHideReasonTargetId] = useState('')
 
   const fetchReviews = useCallback(async (nextFilters, options = {}) => {
     const { silent = false } = options
@@ -123,20 +125,26 @@ const ManageReviews = () => {
     setCurrentPage(1)
   }
 
-  const handleHideReview = async (review) => {
-    const hiddenReason = window.prompt('Lý do ẩn đánh giá:', review.hiddenReason || 'Nội dung không phù hợp.')
-    if (hiddenReason === null) return
+  const openHideReasonModal = (review) => {
+    setHideReasonTargetId(review._id)
+  }
+
+  const handleHideReview = async (review, hiddenReason) => {
+    if (!hiddenReason?.trim()) {
+      return toast.error('Vui lòng nhập lý do ẩn đánh giá.')
+    }
 
     try {
       setProcessingId(review._id)
       const { data } = await axios.patch(`/api/admin/reviews/${review._id}/hide`, {
-        hiddenReason
+        hiddenReason: hiddenReason.trim()
       }, {
         headers: { Authorization: `Bearer ${await getToken()}` }
       })
 
       if (data.success) {
         toast.success(data.message)
+        setHideReasonTargetId('')
         await fetchReviews(filters, { silent: true })
       } else {
         toast.error(data.message)
@@ -213,6 +221,10 @@ const ManageReviews = () => {
   const selectedReview = useMemo(
     () => reviews.find((review) => review._id === selectedReviewId) || null,
     [reviews, selectedReviewId]
+  )
+  const hideReasonTarget = useMemo(
+    () => reviews.find((review) => review._id === hideReasonTargetId) || null,
+    [hideReasonTargetId, reviews]
   )
 
   useEffect(() => {
@@ -476,7 +488,7 @@ const ManageReviews = () => {
                     {review.status === 'VISIBLE' ? (
                       <button
                         type='button'
-                        onClick={() => handleHideReview(review)}
+                        onClick={() => openHideReasonModal(review)}
                         disabled={processingId === review._id}
                         className='inline-flex shrink-0 items-center gap-1.5 rounded-full border border-rose-400/40 px-3 py-2 text-xs font-medium text-rose-200 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                       >
@@ -522,8 +534,23 @@ const ManageReviews = () => {
           imageBaseUrl={image_base_url}
           processing={processingId === selectedReview._id}
           onClose={() => setSelectedReviewId('')}
-          onHide={handleHideReview}
+          onHide={openHideReasonModal}
           onRestore={handleRestoreReview}
+        />
+      )}
+
+      {hideReasonTarget && (
+        <AdminReasonModal
+          title='Nhập lý do ẩn đánh giá'
+          description={`Đánh giá của ${hideReasonTarget.userName || 'người dùng QuickShow'} sẽ bị ẩn khỏi phía khách hàng.`}
+          label='Lý do ẩn'
+          placeholder='VD: Nội dung không phù hợp, tiết lộ nội dung phim, ngôn từ công kích...'
+          initialValue={hideReasonTarget.hiddenReason || 'Nội dung không phù hợp.'}
+          confirmText='Ẩn đánh giá'
+          variant='violet'
+          isSubmitting={processingId === hideReasonTarget._id}
+          onClose={() => setHideReasonTargetId('')}
+          onConfirm={(reason) => handleHideReview(hideReasonTarget, reason)}
         />
       )}
     </div>
