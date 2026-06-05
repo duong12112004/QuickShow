@@ -44,7 +44,14 @@ export const STATUS_ACTOR = {
     ZALOPAY: "ZALOPAY"
 };
 
-export const PAYMENT_HOLD_MINUTES = 30;
+export const STRIPE_PAYMENT_HOLD_MINUTES = 30;
+export const ZALOPAY_PAYMENT_HOLD_MINUTES = 10;
+export const PAYMENT_HOLD_MINUTES = STRIPE_PAYMENT_HOLD_MINUTES;
+export const getPaymentHoldMinutes = (paymentProvider = PAYMENT_PROVIDER.STRIPE_TEST) => (
+    paymentProvider === PAYMENT_PROVIDER.ZALOPAY_TEST
+        ? ZALOPAY_PAYMENT_HOLD_MINUTES
+        : STRIPE_PAYMENT_HOLD_MINUTES
+);
 export const USER_CANCELLATION_NOTICE_HOURS = 24;
 export const USER_REFUND_RATE = 0.8;
 export const FULL_REFUND_RATE = 1;
@@ -269,7 +276,14 @@ export const buildConcessionSnapshot = async (selectedConcessions = []) => {
     return { concessionItems, concessionAmount };
 };
 
-export const buildBookingSnapshot = async ({ showData, userId, selectedSeats, bookingCode, selectedConcessions = [] }) => {
+export const buildBookingSnapshot = async ({
+    showData,
+    userId,
+    selectedSeats,
+    bookingCode,
+    selectedConcessions = [],
+    paymentProvider = PAYMENT_PROVIDER.STRIPE_TEST
+}) => {
     const { seatDetails, amount: ticketAmount } = buildSeatPricingSnapshot(showData, selectedSeats);
     const { concessionItems, concessionAmount } = await buildConcessionSnapshot(selectedConcessions);
     const amount = ticketAmount + concessionAmount;
@@ -287,8 +301,8 @@ export const buildBookingSnapshot = async ({ showData, userId, selectedSeats, bo
         concessionItems,
         concessionAmount,
         amount,
-        paymentProvider: PAYMENT_PROVIDER.STRIPE_TEST,
-        expiresAt: new Date(Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000)
+        paymentProvider,
+        expiresAt: new Date(Date.now() + getPaymentHoldMinutes(paymentProvider) * 60 * 1000)
     };
 };
 

@@ -136,7 +136,8 @@ const expireUnpaidBookings = inngest.createFunction(
         triggers: { event: "app/checkpayment" }
     },
     async ({ event, step }) => {
-        const expiresAt = new Date(event.data.expiresAt || Date.now() + PAYMENT_HOLD_MINUTES * 60 * 1000);
+        const holdMinutes = Number(event.data.holdMinutes || PAYMENT_HOLD_MINUTES);
+        const expiresAt = new Date(event.data.expiresAt || Date.now() + holdMinutes * 60 * 1000);
         await step.sleepUntil("wait-until-booking-expired", expiresAt);
 
         await step.run("expire-booking-and-release-seats", async () => {
@@ -155,7 +156,7 @@ const expireUnpaidBookings = inngest.createFunction(
                 paymentStatus: PAYMENT_STATUS.EXPIRED,
                 actor: STATUS_ACTOR.SYSTEM,
                 isPaid: false,
-                note: `Quá hạn ${PAYMENT_HOLD_MINUTES} phút thanh toán, hệ thống tự động nhả ghế.`
+                note: `Quá hạn ${holdMinutes} phút thanh toán, hệ thống tự động nhả ghế.`
             });
             booking.paymentLink = "";
             await booking.save();

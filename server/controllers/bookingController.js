@@ -12,6 +12,7 @@ import {
     buildBookingSnapshot,
     confirmBookingPaid,
     createBookingCode,
+    getPaymentHoldMinutes,
     markBookingAsCancelled,
     releaseSeats
 } from "../services/bookingService.js";
@@ -209,8 +210,10 @@ export const createBooking = async (req, res) => {
             userId,
             selectedSeats: normalizedSeats,
             bookingCode,
-            selectedConcessions: concessions
+            selectedConcessions: concessions,
+            paymentProvider: selectedPaymentProvider
         });
+        const paymentHoldMinutes = getPaymentHoldMinutes(selectedPaymentProvider);
         const wallet = useWallet ? await getOrCreateWallet(userId) : null;
         const walletAmountUsed = useWallet ? Math.min(wallet?.balance || 0, snapshot.amount) : 0;
         const stripeAmount = Math.max(snapshot.amount - walletAmountUsed, 0);
@@ -301,7 +304,7 @@ export const createBooking = async (req, res) => {
                 status: booking.bookingStatus,
                 paymentStatus: booking.paymentStatus,
                 actor: STATUS_ACTOR.SYSTEM,
-                note: `Tao phien thanh toan ZaloPay, het han sau ${PAYMENT_HOLD_MINUTES} phut.`
+                note: `Tao phien thanh toan ZaloPay, het han sau ${paymentHoldMinutes} phut.`
             });
             await booking.save();
 
@@ -309,7 +312,8 @@ export const createBooking = async (req, res) => {
                 name: "app/checkpayment",
                 data: {
                     bookingId: booking._id.toString(),
-                    expiresAt: booking.expiresAt.toISOString()
+                    expiresAt: booking.expiresAt.toISOString(),
+                    holdMinutes: paymentHoldMinutes
                 }
             });
 
@@ -365,7 +369,8 @@ export const createBooking = async (req, res) => {
             name: "app/checkpayment",
             data: {
                 bookingId: booking._id.toString(),
-                expiresAt: booking.expiresAt.toISOString()
+                expiresAt: booking.expiresAt.toISOString(),
+                holdMinutes: PAYMENT_HOLD_MINUTES
             }
         });
 

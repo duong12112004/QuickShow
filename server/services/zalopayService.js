@@ -5,6 +5,7 @@ const DEFAULT_CREATE_ORDER_ENDPOINT = "https://sb-openapi.zalopay.vn/v2/create";
 const DEFAULT_QUERY_ORDER_ENDPOINT = "https://sb-openapi.zalopay.vn/v2/query";
 const DEFAULT_CLIENT_URL = "https://quickshow-eight-rust.vercel.app";
 const DEFAULT_SERVER_URL = "https://quickshow-qy3z.onrender.com";
+const DEFAULT_ZALOPAY_EXPIRE_DURATION_SECONDS = 600;
 
 const getVietnamDatePrefix = () => {
     const vietnamNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
@@ -44,7 +45,7 @@ const getZaloPayConfig = () => {
         redirectUrl: process.env.ZALOPAY_REDIRECT_URL || `${clientUrl}/loading/my-bookings`,
         preferredMethod,
         bankCode: process.env.ZALOPAY_BANK_CODE ?? (preferredMethod === "zalopay_wallet" ? "zalopayapp" : ""),
-        expireDurationSeconds: Number(process.env.ZALOPAY_EXPIRE_DURATION_SECONDS || 1800)
+        expireDurationSeconds: Number(process.env.ZALOPAY_EXPIRE_DURATION_SECONDS || DEFAULT_ZALOPAY_EXPIRE_DURATION_SECONDS)
     };
 };
 

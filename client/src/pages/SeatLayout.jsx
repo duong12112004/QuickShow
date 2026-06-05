@@ -658,7 +658,7 @@ const SeatLayout = () => {
 
             <div className='mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-gray-400'>
               <p className='mb-1 flex items-center gap-2 font-medium text-gray-200'><InfoIcon className='h-4 w-4 text-primary' /> Lưu ý</p>
-              <p>Chọn tối đa 5 ghế mỗi giao dịch. Ghế sẽ được giữ trong 30 phút khi chuyển sang thanh toán. Vé đã thanh toán có thể hủy trước giờ chiếu ít nhất 24 giờ.</p>
+              <p>Chọn tối đa 5 ghế mỗi giao dịch. Ghế được giữ 30 phút khi thanh toán Stripe và 10 phút khi thanh toán ZaloPay. Vé đã thanh toán có thể hủy trước giờ chiếu ít nhất 24 giờ.</p>
             </div>
 
             <button onClick={bookTickets} className='mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium transition hover:bg-primary-dull active:scale-95'>
