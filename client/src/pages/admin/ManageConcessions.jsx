@@ -49,6 +49,8 @@ const ManageConcessions = () => {
   const [selectedItem, setSelectedItem] = useState(null)
   const [formData, setFormData] = useState(defaultForm)
   const [formOpen, setFormOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deletingId, setDeletingId] = useState('')
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
@@ -212,12 +214,12 @@ const ManageConcessions = () => {
     }
   }
 
-  const deleteItem = async (item) => {
-    const confirmed = window.confirm(`Xóa "${item.name}" khỏi danh sách combo bắp nước?`)
-    if (!confirmed) return
+  const deleteItem = async () => {
+    if (!deleteTarget) return
 
     try {
-      const { data } = await axios.delete(`/api/admin/concessions/${item._id}`, {
+      setDeletingId(deleteTarget._id)
+      const { data } = await axios.delete(`/api/admin/concessions/${deleteTarget._id}`, {
         headers: { Authorization: `Bearer ${await getToken()}` },
       })
 
@@ -227,10 +229,13 @@ const ManageConcessions = () => {
       }
 
       toast.success(data.message)
+      setDeleteTarget(null)
       fetchItems()
     } catch (error) {
       console.error(error)
       toast.error('Không xóa được món.')
+    } finally {
+      setDeletingId('')
     }
   }
 
@@ -386,7 +391,7 @@ const ManageConcessions = () => {
                     </button>
                     <button
                       type='button'
-                      onClick={() => deleteItem(item)}
+                      onClick={() => setDeleteTarget(item)}
                       className='inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10'
                     >
                       <Trash2 className='h-3.5 w-3.5' />
@@ -514,6 +519,87 @@ const ManageConcessions = () => {
               {saving ? 'Đang xử lý...' : selectedItem ? 'Lưu cập nhật' : 'Thêm món'}
             </button>
           </form>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className='fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm'
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && deletingId !== deleteTarget._id) {
+              setDeleteTarget(null)
+            }
+          }}
+        >
+          <div
+            role='dialog'
+            aria-modal='true'
+            aria-labelledby='delete-concession-title'
+            className='w-full max-w-lg rounded-3xl border border-rose-400/20 bg-slate-950 p-5 shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:p-6'
+          >
+            <div className='flex items-start justify-between gap-4'>
+              <div className='flex items-start gap-3'>
+                <div className='rounded-2xl border border-rose-400/25 bg-rose-500/10 p-2.5 text-rose-300'>
+                  <Trash2 className='h-5 w-5' />
+                </div>
+                <div>
+                  <p className='text-xs font-semibold uppercase tracking-[0.2em] text-rose-300'>Xác nhận thao tác</p>
+                  <h2 id='delete-concession-title' className='mt-2 text-xl font-semibold text-white'>Xóa combo bắp nước?</h2>
+                  <p className='mt-2 text-sm leading-6 text-gray-400'>
+                    Món này sẽ bị xóa khỏi danh sách quản lý và không còn xuất hiện khi khách đặt vé.
+                  </p>
+                </div>
+              </div>
+              <button
+                type='button'
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId === deleteTarget._id}
+                className='rounded-xl border border-white/10 p-2 text-gray-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50'
+                aria-label='Đóng xác nhận xóa combo'
+              >
+                <XCircle className='h-5 w-5' />
+              </button>
+            </div>
+
+            <div className='mt-5 flex gap-4 rounded-2xl border border-white/10 bg-black/20 p-4'>
+              {deleteTarget.imageUrl ? (
+                <img src={deleteTarget.imageUrl} alt={deleteTarget.name} className='h-20 w-20 shrink-0 rounded-2xl object-cover' />
+              ) : (
+                <div className='flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10 text-amber-300'>
+                  <Popcorn className='h-7 w-7' />
+                </div>
+              )}
+              <div className='min-w-0'>
+                <p className='line-clamp-2 font-semibold text-white'>{deleteTarget.name}</p>
+                <p className='mt-2 text-sm text-gray-400'>{categoryOptions.find((option) => option.value === deleteTarget.category)?.label || deleteTarget.category}</p>
+                <p className='mt-1 text-lg font-semibold text-amber-300'>{Number(deleteTarget.price || 0).toLocaleString('vi-VN')} {currency}</p>
+              </div>
+            </div>
+
+            <div className='mt-5 rounded-2xl border border-amber-400/20 bg-amber-500/8 p-4 text-sm leading-6 text-amber-100'>
+              Các booking cũ vẫn giữ thông tin món đã snapshot. Thao tác này chỉ ảnh hưởng danh mục combo hiện tại.
+            </div>
+
+            <div className='mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'>
+              <button
+                type='button'
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId === deleteTarget._id}
+                className='rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50'
+              >
+                Giữ lại
+              </button>
+              <button
+                type='button'
+                onClick={deleteItem}
+                disabled={deletingId === deleteTarget._id}
+                className='inline-flex items-center justify-center gap-2 rounded-full border border-rose-400/40 bg-rose-500/10 px-5 py-2.5 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60'
+              >
+                <Trash2 className='h-4 w-4' />
+                {deletingId === deleteTarget._id ? 'Đang xóa...' : 'Xóa combo'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

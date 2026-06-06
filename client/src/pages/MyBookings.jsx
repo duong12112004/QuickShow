@@ -54,6 +54,7 @@ const MyBookings = () => {
   const [reviewTarget, setReviewTarget] = useState(null);
   const [reviewForm, setReviewForm] = useState(initialReviewForm);
   const [qrTarget, setQrTarget] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [qrByBookingId, setQrByBookingId] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
@@ -81,10 +82,9 @@ const MyBookings = () => {
     }
   };
 
-  const handleCancelBooking = async (bookingId) => {
-    const confirmed = window.confirm('Bạn có chắc chắn muốn hủy booking này không? Nếu đủ điều kiện, hệ thống sẽ cộng 80% giá trị booking vào ví QuickShow và giữ 20% phí hủy.');
-
-    if (!confirmed) return;
+  const handleCancelBooking = async () => {
+    if (!cancelTarget) return;
+    const bookingId = cancelTarget._id;
 
     try {
       setProcessingId(bookingId);
@@ -94,6 +94,7 @@ const MyBookings = () => {
 
       if (data.success) {
         toast.success(data.message);
+        setCancelTarget(null);
         await Promise.all([getMyBookings(), fetchWallet()]);
       } else {
         toast.error(data.message);
@@ -482,7 +483,7 @@ const MyBookings = () => {
 
                     {canCancel && (
                       <button
-                        onClick={() => handleCancelBooking(item._id)}
+                        onClick={() => setCancelTarget(item)}
                         disabled={processingId === item._id}
                         className='rounded-full border border-rose-400/40 px-5 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60'
                       >
@@ -558,6 +559,73 @@ const MyBookings = () => {
               onPageChange={setCurrentPage}
               disabled={filteredBookings.length === 0}
             />
+          </div>
+        )}
+
+        {cancelTarget && (
+          <div
+            className='fixed inset-0 z-[130] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm'
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && processingId !== cancelTarget._id) {
+                setCancelTarget(null);
+              }
+            }}
+          >
+            <div
+              role='dialog'
+              aria-modal='true'
+              aria-labelledby='cancel-booking-title'
+              className='w-full max-w-lg rounded-3xl border border-rose-400/20 bg-[#11131c] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.6)] sm:p-6'
+            >
+              <div className='flex items-start justify-between gap-4'>
+                <div>
+                  <p className='text-xs font-semibold uppercase tracking-[0.2em] text-rose-300'>Xác nhận thao tác</p>
+                  <h2 id='cancel-booking-title' className='mt-2 text-xl font-semibold text-white'>Hủy booking {cancelTarget.bookingCode}</h2>
+                  <p className='mt-2 text-sm leading-6 text-gray-400'>
+                    Bạn có chắc chắn muốn hủy booking này không?
+                  </p>
+                </div>
+                <button
+                  type='button'
+                  onClick={() => setCancelTarget(null)}
+                  disabled={processingId === cancelTarget._id}
+                  className='rounded-xl border border-white/10 p-2 text-gray-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50'
+                  aria-label='Đóng xác nhận hủy booking'
+                >
+                  <XIcon className='h-5 w-5' />
+                </button>
+              </div>
+
+              <div className='mt-5 rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100'>
+                Nếu đủ điều kiện, hệ thống sẽ cộng <strong>80%</strong> giá trị booking vào ví QuickShow và giữ <strong>20%</strong> phí hủy.
+              </div>
+
+              <div className='mt-5 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-gray-300 sm:grid-cols-2'>
+                <p><span className='text-gray-500'>Phim:</span> {cancelTarget.movieTitle || cancelTarget.show?.movie?.titleVi || cancelTarget.show?.movie?.title || 'Chưa có dữ liệu'}</p>
+                <p><span className='text-gray-500'>Tổng tiền:</span> {(cancelTarget.amount || 0).toLocaleString('vi-VN')} {currency}</p>
+                <p><span className='text-gray-500'>Phòng:</span> {cancelTarget.roomName || cancelTarget.show?.room?.name || 'Chưa có dữ liệu'}</p>
+                <p><span className='text-gray-500'>Ghế:</span> {cancelTarget.bookedSeats?.join(', ') || 'Chưa có dữ liệu'}</p>
+              </div>
+
+              <div className='mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'>
+                <button
+                  type='button'
+                  onClick={() => setCancelTarget(null)}
+                  disabled={processingId === cancelTarget._id}
+                  className='rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50'
+                >
+                  Giữ booking
+                </button>
+                <button
+                  type='button'
+                  onClick={handleCancelBooking}
+                  disabled={processingId === cancelTarget._id}
+                  className='rounded-full border border-rose-400/40 bg-rose-500/10 px-5 py-2.5 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60'
+                >
+                  {processingId === cancelTarget._id ? 'Đang hủy booking...' : 'Xác nhận hủy'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

@@ -77,6 +77,7 @@ const emptyDashboardData = {
 }
 
 const formatCurrency = (value, currency) => `${Number(value || 0).toLocaleString('vi-VN')} ${currency}`
+const getMovieDisplayTitle = (movie) => movie?.titleVi || movie?.title || 'Chưa có tên phim'
 const formatCompactNumber = (value) => new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
 const hasRevenueData = (items = []) => items.some((item) => (item.grossRevenue || item.netRevenue || item.refundAmount || item.bookings || item.tickets) > 0)
 const hasPieData = (items = []) => items.some((item) => (item.value || 0) > 0)
@@ -586,12 +587,12 @@ const DashBoard = () => {
               <div key={show._id} className='flex flex-col gap-4 rounded-3xl border border-white/8 bg-black/20 p-4 transition duration-300 hover:-translate-y-1 hover:border-primary/40 md:flex-row md:items-center md:justify-between'>
                 <div className='flex min-w-0 gap-4'>
                   {show.movie?.poster_path ? (
-                    <img src={image_base_url + show.movie.poster_path} alt={show.movie?.title || 'Poster phim'} className='h-28 w-20 rounded-2xl object-cover' />
+                    <img src={image_base_url + show.movie.poster_path} alt={getMovieDisplayTitle(show.movie)} className='h-28 w-20 rounded-2xl object-cover' />
                   ) : (
                     <div className='flex h-28 w-20 items-center justify-center rounded-2xl bg-white/8 text-xs text-gray-400'>No poster</div>
                   )}
                   <div className='min-w-0'>
-                    <p className='line-clamp-2 text-lg font-semibold text-white'>{show.movie?.title || 'Chưa có tên phim'}</p>
+                    <p className='line-clamp-2 text-lg font-semibold text-white'>{getMovieDisplayTitle(show.movie)}</p>
                     <div className='mt-2 flex flex-wrap gap-2 text-sm text-gray-300'>
                       <span className='rounded-full bg-white/6 px-3 py-1'>{show.room?.name || 'Chưa có phòng'}</span>
                       <span className='rounded-full bg-white/6 px-3 py-1'>{dateFormat(show.showDateTime)}</span>

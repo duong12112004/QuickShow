@@ -553,9 +553,47 @@ export const getDashboardData = async (req, res) => {
             Booking.aggregate([
                 { $match: paidRangeMatch },
                 {
+                    $lookup: {
+                        from: "shows",
+                        localField: "show",
+                        foreignField: "_id",
+                        as: "dashboardShow"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$dashboardShow",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "movies",
+                        localField: "dashboardShow.movie",
+                        foreignField: "_id",
+                        as: "dashboardMovie"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$dashboardMovie",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
                     $addFields: {
                         movieTitleSafe: {
-                            $ifNull: ["$movieTitle", "Chưa có tên phim"]
+                            $cond: [
+                                { $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ["$dashboardMovie.titleVi", ""] } } } }, 0] },
+                                "$dashboardMovie.titleVi",
+                                {
+                                    $cond: [
+                                        { $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ["$dashboardMovie.title", ""] } } } }, 0] },
+                                        "$dashboardMovie.title",
+                                        { $ifNull: ["$movieTitle", "Chưa có tên phim"] }
+                                    ]
+                                }
+                            ]
                         },
                         settledRefund: {
                             $cond: [

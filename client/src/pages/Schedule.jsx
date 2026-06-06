@@ -14,6 +14,7 @@ import BlurCircle from '../components/BlurCircle'
 import Loading from '../components/Loading'
 import isoTimeFormat from '../lib/isoTimeFormat'
 import timeFormat from '../lib/timeFormat'
+import { getMovieGenres, getMovieTitle } from '../lib/movieDisplay'
 import { useAppContext } from '../context/AppContext'
 
 const TOTAL_SCHEDULE_DAYS = 15
@@ -206,17 +207,21 @@ const Schedule = () => {
             </div>
           )}
 
-          {activeDayMovies.map(({ movie, showtimes, minPrice }) => (
-            <div
-              key={movie._id}
-              className='rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.22)] sm:p-5 lg:p-6'
-            >
+          {activeDayMovies.map(({ movie, showtimes, minPrice }) => {
+            const movieTitle = getMovieTitle(movie)
+            const movieGenres = getMovieGenres(movie)
+
+            return (
+              <div
+                key={movie._id}
+                className='rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.22)] sm:p-5 lg:p-6'
+              >
               <div className='grid grid-cols-[96px_minmax(0,1fr)] items-center gap-4 sm:grid-cols-[128px_minmax(0,1fr)] sm:gap-5 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6'>
                 <div className='flex h-full items-center justify-center'>
                   <div className='w-full overflow-hidden rounded-[1.25rem] border border-white/10'>
                     <img
                       src={image_base_url + movie.poster_path}
-                      alt={movie.title}
+                      alt={movieTitle}
                       className='block aspect-[3/4] w-full object-cover'
                     />
                   </div>
@@ -225,7 +230,7 @@ const Schedule = () => {
                 <div className='flex flex-col gap-4 sm:gap-5'>
                   <div className='flex flex-col gap-3 md:flex-row md:items-start md:justify-between'>
                     <div>
-                      <p className='text-lg font-semibold text-white sm:text-2xl lg:text-3xl'>{movie.title}</p>
+                      <p className='text-lg font-semibold text-white sm:text-2xl lg:text-3xl'>{movieTitle}</p>
                     </div>
 
                     <button
@@ -257,7 +262,7 @@ const Schedule = () => {
                   </div>
 
                   <div className='flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-gray-400 sm:text-xs'>
-                    {movie.genres?.slice(0, 3).map((genre) => (
+                    {movieGenres?.slice(0, 3).map((genre) => (
                       <span key={genre.id || genre.name} className='rounded-full border border-white/10 px-3 py-2'>
                         {genre.name}
                       </span>
@@ -298,7 +303,8 @@ const Schedule = () => {
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

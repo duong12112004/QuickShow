@@ -8,6 +8,7 @@ import timeFormat from '../lib/timeFormat'
 import toast from 'react-hot-toast'
 import BlurCircle from '../components/BlurCircle'
 import { useAppContext } from '../context/AppContext'
+import { getMovieTitle } from '../lib/movieDisplay'
 import { socket } from '../configs/socket';
 
 const getSeatUnitPrice = (seatType, basePrice) => {
@@ -317,7 +318,7 @@ const SeatLayout = () => {
   const stripeAmount = Math.max(totalPrice - walletAmountUsed, 0)
   const paymentProviderLabel = paymentProvider === 'ZALOPAY' ? 'ZaloPay' : 'Stripe'
   const movie = show?.movie
-  const movieTitle = movie?.title || movie?.original_title || 'Phim đang chiếu'
+  const movieTitle = getMovieTitle(movie)
   const selectedShowDate = selectedTime?.time
     ? new Date(selectedTime.time).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
     : ''
@@ -621,14 +622,15 @@ const SeatLayout = () => {
               <div className='mt-4 rounded-xl border border-white/10 bg-black/15 p-3'>
                 <p className='mb-3 text-xs font-medium uppercase tracking-[0.2em] text-primary/80'>Phương thức thanh toán</p>
                 <div className='grid grid-cols-2 gap-2'>
-                  {paymentMethods.map(({ value, label, description, Icon }) => {
-                    const isSelected = paymentProvider === value
+                  {paymentMethods.map((paymentMethod) => {
+                    const isSelected = paymentProvider === paymentMethod.value
+                    const PaymentIcon = paymentMethod.Icon
 
                     return (
                       <button
-                        key={value}
+                        key={paymentMethod.value}
                         type='button'
-                        onClick={() => setPaymentProvider(value)}
+                        onClick={() => setPaymentProvider(paymentMethod.value)}
                         className={`flex min-h-20 flex-col items-start justify-center rounded-xl border px-3 py-3 text-left transition ${
                           isSelected
                             ? 'border-primary bg-primary/15 text-white'
@@ -636,10 +638,10 @@ const SeatLayout = () => {
                         }`}
                       >
                         <span className='flex items-center gap-2 text-sm font-medium'>
-                          <Icon className='h-4 w-4 text-primary' />
-                          {label}
+                          {React.createElement(PaymentIcon, { className: 'h-4 w-4 text-primary' })}
+                          {paymentMethod.label}
                         </span>
-                        <span className='mt-1 text-xs text-gray-400'>{description}</span>
+                        <span className='mt-1 text-xs text-gray-400'>{paymentMethod.description}</span>
                       </button>
                     )
                   })}
