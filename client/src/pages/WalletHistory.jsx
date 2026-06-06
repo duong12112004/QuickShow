@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useClerk } from '@clerk/clerk-react'
 import {
   ArrowDownLeft,
@@ -16,6 +16,7 @@ import AdminPagination from '../components/admin/AdminPagination'
 import { useAppContext } from '../context/AppContext'
 
 const PAGE_SIZE = 5
+const FETCH_LIMIT = 300
 
 const transactionTypes = [
   { value: '', label: 'Tất cả giao dịch' },
@@ -76,7 +77,14 @@ const WalletHistory = () => {
   const [isLoading, setIsLoading] = useState(false)
 
   const currency = wallet.currency || import.meta.env.VITE_CURRENCY || 'VND'
-  const pagination = wallet.pagination || {}
+  const transactions = wallet.transactions || []
+  const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE))
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (page - 1) * PAGE_SIZE
+    return transactions.slice(startIndex, startIndex + PAGE_SIZE)
+  }, [page, transactions])
+  const startRow = transactions.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const endRow = Math.min(page * PAGE_SIZE, transactions.length)
 
   const loadWalletHistory = useCallback(async () => {
     if (!user) return
@@ -86,7 +94,7 @@ const WalletHistory = () => {
     try {
       const { data } = await axios.get('/api/user/wallet', {
         headers: { Authorization: `Bearer ${await getToken()}` },
-        params: { page, limit: PAGE_SIZE, type }
+        params: { page: 1, limit: FETCH_LIMIT, type }
       })
 
       if (data.success) {
@@ -101,7 +109,7 @@ const WalletHistory = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [axios, getToken, page, type, user])
+  }, [axios, getToken, type, user])
 
   useEffect(() => {
     loadWalletHistory()
@@ -120,6 +128,12 @@ const WalletHistory = () => {
     setType('')
     setPage(1)
   }
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [page, totalPages])
 
   if (!user) {
     return (
@@ -219,20 +233,26 @@ const WalletHistory = () => {
             </select>
 
             <div className='flex items-center rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-300'>
-              {pagination.totalTransactions > 0
-                ? `Đang có ${pagination.totalTransactions} giao dịch phù hợp`
+              {transactions.length > 0
+                ? `Đang hiển thị ${startRow}-${endRow} trên tổng ${transactions.length} giao dịch phù hợp`
                 : 'Không có giao dịch phù hợp với bộ lọc hiện tại'}
             </div>
           </div>
         </div>
 
-        {isLoading ? (
+        {isLoading && transactions.length === 0 ? (
           <div className='flex min-h-64 items-center justify-center rounded-3xl border border-primary/20 bg-primary/8'>
             <div className='h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-primary' />
           </div>
-        ) : wallet.transactions?.length ? (
+        ) : transactions.length ? (
           <div className='space-y-5 pb-10'>
-            {wallet.transactions.map((transaction) => {
+            {isLoading && (
+              <div className='rounded-2xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-100'>
+                Đang cập nhật lịch sử ví...
+              </div>
+            )}
+
+            {paginatedTransactions.map((transaction) => {
               const config = typeConfig[transaction.type] || typeConfig.CREDIT
               const Icon = config.icon
 
@@ -291,11 +311,11 @@ const WalletHistory = () => {
           </div>
         )}
 
-        {!isLoading && pagination.totalPages > 1 && (
+        {!isLoading && totalPages > 1 && (
           <div className='pb-12'>
             <AdminPagination
               currentPage={page}
-              totalPages={pagination.totalPages}
+              totalPages={totalPages}
               onPageChange={setPage}
             />
           </div>

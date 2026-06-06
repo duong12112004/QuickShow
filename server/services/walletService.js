@@ -25,7 +25,7 @@ export const getWalletSummary = async (userId, {
 } = {}) => {
     const wallet = await getOrCreateWallet(userId);
     const normalizedPage = Math.max(Number.parseInt(page, 10) || 1, 1);
-    const normalizedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 8, 1), 50);
+    const normalizedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 8, 1), 300);
     const query = { user: userId };
 
     if (type) {
