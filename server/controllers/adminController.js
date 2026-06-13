@@ -34,6 +34,7 @@ import {
     validateUpdateShowtimePayload
 } from "../services/showtimeService.js";
 
+// Các trạng thái thanh toán được tính là đã phát sinh doanh thu, kể cả đang/đã hoàn tiền.
 const PAID_BOOKING_MATCH = {
     paymentStatus: {
         $in: [
@@ -45,6 +46,7 @@ const PAID_BOOKING_MATCH = {
     }
 };
 
+// Booking ở các trạng thái cuối không cần xử lý lại khi hủy cả suất chiếu.
 const BOOKING_FINAL_STATUSES = [
     BOOKING_STATUS.CANCELLED,
     BOOKING_STATUS.PAYMENT_EXPIRED,
@@ -52,6 +54,7 @@ const BOOKING_FINAL_STATUSES = [
     BOOKING_STATUS.NO_SHOW
 ];
 
+// Dashboard quy đổi ngày theo giờ Việt Nam và chỉ cho chọn các khoảng thời gian cố định.
 const DASHBOARD_TIMEZONE = "Asia/Ho_Chi_Minh";
 const DASHBOARD_RANGE_OPTIONS = [7, 14, 30];
 const DASHBOARD_DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,11 +82,13 @@ const DASHBOARD_STATUS_ORDER = [
     BOOKING_STATUS.PAYMENT_EXPIRED
 ];
 
+// Chỉ chấp nhận số ngày mà giao diện dashboard hỗ trợ; mặc định là 7 ngày.
 const parseDashboardRangeDays = (value) => {
     const parsed = Number.parseInt(value, 10);
     return DASHBOARD_RANGE_OPTIONS.includes(parsed) ? parsed : 7;
 };
 
+// Tính thời điểm 00:00 của một ngày theo múi giờ Việt Nam nhưng trả về dưới dạng Date UTC.
 const getDashboardDayStart = (date = new Date()) => {
     const shifted = new Date(date.getTime() + DASHBOARD_UTC_OFFSET_MS);
     const shiftedMidnightUtc = Date.UTC(
@@ -95,6 +100,7 @@ const getDashboardDayStart = (date = new Date()) => {
     return new Date(shiftedMidnightUtc - DASHBOARD_UTC_OFFSET_MS);
 };
 
+// Tách năm/tháng/ngày theo múi giờ dashboard để tạo key và label ổn định.
 const formatDateParts = (date) => {
     const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone: DASHBOARD_TIMEZONE,
@@ -111,16 +117,19 @@ const formatDateParts = (date) => {
     }, {});
 };
 
+// Tạo key YYYY-MM-DD dùng để ghép dữ liệu aggregation vào từng ngày.
 const formatDashboardDateKey = (date) => {
     const parts = formatDateParts(date);
     return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+// Tạo nhãn DD/MM dùng để hiển thị trên biểu đồ.
 const formatDashboardDateLabel = (date) => {
     const parts = formatDateParts(date);
     return `${parts.day}/${parts.month}`;
 };
 
+// Xây khoảng thời gian báo cáo và danh sách đầy đủ từng ngày, kể cả ngày không có dữ liệu.
 const getDashboardRange = (rangeDays) => {
     const todayStart = getDashboardDayStart();
     const start = new Date(todayStart.getTime() - (rangeDays - 1) * DASHBOARD_DAY_MS);
@@ -144,6 +153,7 @@ const getDashboardRange = (rangeDays) => {
     };
 };
 
+// Suy ra số tiền hoàn thực tế, đồng thời hỗ trợ các booking cũ chưa lưu refundAmount.
 const buildEffectiveRefundExpression = () => ({
     $cond: [
         { $gt: [{ $ifNull: ["$refundAmount", 0] }, 0] },
@@ -158,6 +168,7 @@ const buildEffectiveRefundExpression = () => ({
     ]
 });
 
+// Tạo biểu thức MongoDB xác định phần hoàn vào ví từ dữ liệu mới và dữ liệu cũ.
 const buildWalletRefundExpression = () => {
     const effectiveRefund = buildEffectiveRefundExpression();
 
@@ -210,6 +221,7 @@ const buildWalletRefundExpression = () => {
     };
 };
 
+// Tạo biểu thức MongoDB xác định phần hoàn qua Stripe từ dữ liệu mới và dữ liệu cũ.
 const buildStripeRefundExpression = () => {
     const effectiveRefund = buildEffectiveRefundExpression();
 
@@ -268,6 +280,7 @@ const buildStripeRefundExpression = () => {
     };
 };
 
+// Báo realtime cho client đang xem suất chiếu rằng các ghế đã được nhả.
 const emitSeatsReleased = (req, showId, seats = []) => {
     const io = req.app.get("io");
 
@@ -276,6 +289,7 @@ const emitSeatsReleased = (req, showId, seats = []) => {
     }
 };
 
+// Tổng hợp doanh thu và số booking đã thanh toán theo từng suất chiếu.
 const buildRevenueMap = async (showIds) => {
     if (showIds.length === 0) {
         return new Map();
@@ -300,6 +314,7 @@ const buildRevenueMap = async (showIds) => {
     return new Map(rows.map((row) => [row._id.toString(), row]));
 };
 
+// Lọc tìm kiếm và khoảng ngày sau khi populate vì các trường phim/phòng/người dùng nằm ở collection khác.
 const applyInMemoryBookingFilters = (bookings, { q, fromDate, toDate }) => {
     const normalizedQuery = `${q || ""}`.trim().toLowerCase();
 
@@ -343,6 +358,7 @@ const applyInMemoryBookingFilters = (bookings, { q, fromDate, toDate }) => {
     });
 };
 
+// Tạo phần query MongoDB cho các trạng thái booking/thanh toán có thể lọc trực tiếp.
 const buildBookingQuery = ({ bookingStatus, paymentStatus }) => {
     const query = {};
 
@@ -357,11 +373,13 @@ const buildBookingQuery = ({ bookingStatus, paymentStatus }) => {
     return query;
 };
 
+// Escape giá trị để nội dung có dấu phẩy hoặc dấu nháy vẫn hợp lệ trong CSV.
 const formatCsvValue = (value) => {
     const safe = `${value ?? ""}`.replace(/"/g, "\"\"");
     return `"${safe}"`;
 };
 
+// Chuyển danh sách booking đã populate thành báo cáo CSV có BOM để Excel đọc đúng tiếng Việt.
 const serializeBookingsToCsv = (bookings) => {
     const headers = [
         "Mã booking",
@@ -424,12 +442,15 @@ const serializeBookingsToCsv = (bookings) => {
     return `\uFEFF${headers.map(formatCsvValue).join(",")}\n${rows.join("\n")}`;
 };
 
+// Lấy ID admin thực hiện thao tác để ghi lịch sử check-in.
 const getAdminUserId = (req) => req.auth?.()?.userId || "admin";
 
+// Endpoint kiểm tra quyền; middleware protectAdmin đã xác thực trước khi controller được gọi.
 export const isAdmin = async (req, res) => {
     res.json({ success: true, isAdmin: true });
 };
 
+// Tổng hợp doanh thu, hoàn tiền, booking, review, món ăn và suất chiếu cho dashboard quản trị.
 export const getDashboardData = async (req, res) => {
     try {
         const rangeDays = parseDashboardRangeDays(req.query?.rangeDays);
@@ -444,6 +465,7 @@ export const getDashboardData = async (req, res) => {
         const walletRefund = buildWalletRefundExpression();
         const stripeRefund = buildStripeRefundExpression();
 
+        // Chạy song song các aggregation độc lập để giảm thời gian tải dashboard.
         const [
             [summary],
             revenueTrendRows,
@@ -457,6 +479,7 @@ export const getDashboardData = async (req, res) => {
             scheduledShows,
             totalUser
         ] = await Promise.all([
+            // Tổng quan doanh thu, hoàn tiền, số booking và số vé trong kỳ.
             Booking.aggregate([
                 { $match: paidRangeMatch },
                 {
@@ -508,6 +531,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Doanh thu, hoàn tiền và số vé theo từng ngày.
             Booking.aggregate([
                 { $match: paidRangeMatch },
                 {
@@ -541,6 +565,7 @@ export const getDashboardData = async (req, res) => {
                 },
                 { $sort: { _id: 1 } }
             ]),
+            // Số booking theo từng trạng thái nghiệp vụ.
             Booking.aggregate([
                 { $match: bookingRangeMatch },
                 {
@@ -550,6 +575,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Các phim có doanh thu ròng cao nhất.
             Booking.aggregate([
                 { $match: paidRangeMatch },
                 {
@@ -633,6 +659,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Tổng quan review trong kỳ.
             MovieReview.aggregate([
                 { $match: reviewRangeMatch },
                 {
@@ -683,6 +710,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Xu hướng review theo từng ngày.
             MovieReview.aggregate([
                 { $match: reviewRangeMatch },
                 {
@@ -715,6 +743,7 @@ export const getDashboardData = async (req, res) => {
                 },
                 { $sort: { _id: 1 } }
             ]),
+            // Doanh thu và số lượng món ăn bán kèm booking.
             Booking.aggregate([
                 { $match: paidRangeMatch },
                 {
@@ -740,6 +769,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Các món ăn có doanh thu cao nhất.
             Booking.aggregate([
                 { $match: paidRangeMatch },
                 { $unwind: "$concessionItems" },
@@ -763,6 +793,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Số món đang bán và ngừng bán trong danh mục.
             Concession.aggregate([
                 {
                     $group: {
@@ -777,6 +808,7 @@ export const getDashboardData = async (req, res) => {
                     }
                 }
             ]),
+            // Suất chiếu sắp tới dùng cho bảng nhanh trên dashboard.
             Show.find({
                 showDateTime: { $gte: upcomingStart, $lt: upcomingEndExclusive },
                 ...buildScheduledShowtimeFilter()
@@ -787,6 +819,7 @@ export const getDashboardData = async (req, res) => {
             User.countDocuments()
         ]);
 
+        // Điền các ngày không có giao dịch bằng giá trị 0 để biểu đồ luôn liên tục.
         const revenueTrendMap = new Map(
             revenueTrendRows.map((row) => [
                 row._id,
@@ -826,6 +859,7 @@ export const getDashboardData = async (req, res) => {
                 return (left === -1 ? 999 : left) - (right === -1 ? 999 : right);
             });
 
+        // Gắn doanh thu đã tổng hợp vào tối đa 8 suất chiếu sắp tới.
         const revenueMap = await buildRevenueMap(scheduledShows.map((showtime) => showtime._id));
         const now = new Date();
         const upcomingShows = scheduledShows.slice(0, 8).map((showtime) => {
@@ -927,6 +961,7 @@ export const getDashboardData = async (req, res) => {
     }
 };
 
+// Trả toàn bộ suất chiếu cho admin kèm vòng đời, số ghế và doanh thu.
 export const getAdminShowtimes = async (req, res) => {
     try {
         const showtimes = await Show.find({})
@@ -953,8 +988,10 @@ export const getAdminShowtimes = async (req, res) => {
     }
 };
 
+// Alias giữ tương thích với route/tên hàm cũ.
 export const getAllShows = getAdminShowtimes;
 
+// Tạo một hoặc nhiều suất chiếu sau khi kiểm tra phòng, phim, thời gian và trùng lịch.
 export const createShowtime = async (req, res) => {
     try {
         const { movieId, roomId, basePrice, cleanupMinutes, showtimes } = validateCreateShowtimePayload(req.body);
@@ -962,6 +999,7 @@ export const createShowtime = async (req, res) => {
         const movie = await ensureMovieExists(movieId);
 
         const docs = [];
+        // Kiểm tra trùng giữa các suất trong request và với các suất đã lưu trong database.
         for (const showDateTime of showtimes) {
             assertShowtimeNotInPast(showDateTime);
             assertNoLocalShowtimeOverlap({
@@ -1005,6 +1043,7 @@ export const createShowtime = async (req, res) => {
     }
 };
 
+// Sửa suất chiếu sắp tới chưa có booking/ghế giữ và tính lại thời gian kết thúc.
 export const updateShowtime = async (req, res) => {
     try {
         const { showId } = req.params;
@@ -1070,6 +1109,7 @@ export const updateShowtime = async (req, res) => {
     }
 };
 
+// Hủy suất chiếu, xử lý mọi booking liên quan, nhả ghế và gửi sự kiện thông báo.
 export const cancelShowtime = async (req, res) => {
     try {
         const { showId } = req.params;
@@ -1106,6 +1146,7 @@ export const cancelShowtime = async (req, res) => {
         let cancelledCount = 0;
         const releasedSeats = [];
 
+        // Mỗi booking được xử lý riêng để một lỗi hoàn tiền không chặn các booking còn lại.
         for (const booking of bookings) {
             try {
                 const result = await cancelBookingAndHandlePayment(booking, {
@@ -1151,6 +1192,7 @@ export const cancelShowtime = async (req, res) => {
     }
 };
 
+// Xóa hẳn suất chiếu chưa diễn ra và chưa từng có booking hoặc ghế đang giữ.
 export const deleteShowtime = async (req, res) => {
     try {
         const { showId } = req.params;
@@ -1181,6 +1223,7 @@ export const deleteShowtime = async (req, res) => {
     }
 };
 
+// Trả danh sách booking cho admin, đồng bộ trạng thái cũ/Stripe rồi áp dụng bộ lọc tìm kiếm.
 export const getAllBookings = async (req, res) => {
     try {
         const query = buildBookingQuery(req.query);
@@ -1192,6 +1235,7 @@ export const getAllBookings = async (req, res) => {
             })
             .sort({ createdAt: -1 });
 
+        // Đồng bộ tuần tự để mỗi booking được sửa trạng thái trước khi trả cho admin.
         for (const booking of bookings) {
             try {
                 await reconcileLegacyBookingState(booking);
@@ -1210,6 +1254,7 @@ export const getAllBookings = async (req, res) => {
     }
 };
 
+// Xuất danh sách booking theo cùng bộ lọc của trang quản trị thành file CSV.
 export const exportBookingsCsv = async (req, res) => {
     try {
         const query = buildBookingQuery(req.query);
@@ -1233,6 +1278,7 @@ export const exportBookingsCsv = async (req, res) => {
     }
 };
 
+// Cho admin hủy booking hợp lệ, xử lý hoàn tiền, nhả ghế và gửi email thông báo.
 export const cancelAdminBooking = async (req, res) => {
     try {
         const { bookingId } = req.params;
@@ -1294,6 +1340,7 @@ export const cancelAdminBooking = async (req, res) => {
     }
 };
 
+// Check-in thủ công bằng mã booking do khách cung cấp.
 export const checkInBookingByCode = async (req, res) => {
     try {
         const bookingCode = `${req.body?.bookingCode || ""}`.trim().toUpperCase();
@@ -1333,6 +1380,7 @@ export const checkInBookingByCode = async (req, res) => {
     }
 };
 
+// Xác thực QR có chữ ký, đối chiếu booking/suất chiếu rồi thực hiện check-in.
 export const checkInBookingByQr = async (req, res) => {
     try {
         const qrToken = `${req.body?.qrToken || ""}`.trim();

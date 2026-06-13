@@ -20,6 +20,7 @@ import { createZaloPayPayment } from "../services/zalopayService.js";
 import { getPaidSeatCount, getShowtimeLifecycle, SHOWTIME_STATUS } from "../services/showtimeService.js";
 import { debitWallet, getOrCreateWallet, reverseWalletDebit } from "../services/walletService.js";
 
+// Lấy đầy đủ dữ liệu cần cho việc đặt vé và chặn các suất chiếu không còn đủ điều kiện mở bán.
 const getBookableShowtime = async (showId) => {
     const showData = await Show.findById(showId).populate("movie").populate("room");
 
@@ -42,6 +43,7 @@ const getBookableShowtime = async (showId) => {
     return showData;
 };
 
+// Clerk gắn hàm auth vào request; mọi booking phải thuộc về một người dùng đã đăng nhập.
 const ensureAuthenticatedUser = (req) => {
     const auth = req.auth?.();
     const userId = auth?.userId;
@@ -53,6 +55,7 @@ const ensureAuthenticatedUser = (req) => {
     return userId;
 };
 
+// Chủ động kiểm tra trùng mã trước khi tạo booking để người dùng có một mã tra cứu duy nhất.
 const generateUniqueBookingCode = async () => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const bookingCode = createBookingCode();
@@ -66,6 +69,7 @@ const generateUniqueBookingCode = async () => {
     throw new Error("Không thể tạo mã đặt vé. Vui lòng thử lại.");
 };
 
+// Chuẩn hóa dữ liệu ghế từ client và áp dụng giới hạn ghế của một giao dịch.
 const validateSelectedSeats = (selectedSeats) => {
     if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) {
         throw new Error("Vui lòng chọn ít nhất một ghế.");
@@ -88,6 +92,7 @@ const validateSelectedSeats = (selectedSeats) => {
     return normalizedSeats;
 };
 
+// Coi mọi lỗi truy xuất hoặc lỗi trạng thái suất chiếu là "không khả dụng" đối với bước kiểm tra nhanh.
 const checkSeatsAvailability = async (showId, selectedSeats) => {
     try {
         const showData = await getBookableShowtime(showId);
@@ -100,6 +105,7 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
     }
 };
 
+// Các helper dưới đây chuyển snapshot của booking thành dữ liệu hiển thị hợp lệ cho Stripe Checkout.
 const getSeatTypeLabel = (seatType) => {
     if (seatType === "VIP") return "Ghế VIP";
     if (seatType === "COUPLE") return "Ghế đôi";
@@ -117,6 +123,7 @@ const trimStripeText = (value, maxLength = 450) => {
     return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
 };
 
+// Stripe nhận mỗi nhóm ghế cùng loại/cùng giá và mỗi combo bắp nước dưới dạng một line item.
 const buildCheckoutLineItems = (booking) => {
     const lineItems = [];
     const seatGroups = new Map();
@@ -173,6 +180,7 @@ const buildCheckoutLineItems = (booking) => {
     return lineItems;
 };
 
+// Chỉ chấp nhận các provider hệ thống hỗ trợ; giá trị thiếu hoặc không hợp lệ sẽ dùng Stripe test.
 const normalizePaymentProvider = (value) => {
     const normalized = `${value || ""}`.trim().toUpperCase();
 
@@ -183,7 +191,12 @@ const normalizePaymentProvider = (value) => {
     return PAYMENT_PROVIDER.STRIPE_TEST;
 };
 
+/**
+ * Tạo booking ở trạng thái chờ thanh toán, giữ ghế và khởi tạo luồng thanh toán phù hợp.
+ * Nếu một bước sau khi tạo booking thất bại, khối catch sẽ cố hoàn ví, nhả ghế và hủy booking.
+ */
 export const createBooking = async (req, res) => {
+    // Hai biến này ghi nhận phần tài nguyên đã tạo để khối rollback biết cần hoàn tác những gì.
     let booking = null;
     let debitedWalletAmount = 0;
 
@@ -196,6 +209,7 @@ export const createBooking = async (req, res) => {
         const normalizedSeats = validateSelectedSeats(selectedSeats);
         const isAvailable = await checkSeatsAvailability(showId, normalizedSeats);
 
+        // Kiểm tra sớm để không tạo booking hoặc gọi cổng thanh toán cho ghế không còn khả dụng.
         if (!isAvailable) {
             return res.json({
                 success: false,
@@ -205,6 +219,7 @@ export const createBooking = async (req, res) => {
 
         const showData = await getBookableShowtime(showId);
         const bookingCode = await generateUniqueBookingCode();
+        // Snapshot lưu tên phim/phòng, giá ghế và combo tại thời điểm đặt để lịch sử không đổi theo dữ liệu gốc.
         const snapshot = await buildBookingSnapshot({
             showData,
             userId,
@@ -216,8 +231,10 @@ export const createBooking = async (req, res) => {
         const paymentHoldMinutes = getPaymentHoldMinutes(selectedPaymentProvider);
         const wallet = useWallet ? await getOrCreateWallet(userId) : null;
         const walletAmountUsed = useWallet ? Math.min(wallet?.balance || 0, snapshot.amount) : 0;
+        // Tên stripeAmount mang tính lịch sử; đây là phần còn lại phải trả qua Stripe hoặc ZaloPay.
         const stripeAmount = Math.max(snapshot.amount - walletAmountUsed, 0);
 
+        // Tạo booking trước khi gọi cổng thanh toán để có mã tham chiếu và dữ liệu phục vụ rollback.
         booking = await Booking.create({
             ...snapshot,
             paymentProvider: selectedPaymentProvider,
@@ -233,6 +250,7 @@ export const createBooking = async (req, res) => {
             }]
         });
 
+        // Ghế được giữ tạm trong thời gian chờ thanh toán; khi thanh toán thành công service sẽ chuyển sang occupiedSeats.
         normalizedSeats.forEach((seat) => {
             showData.heldSeats[seat] = userId;
         });
@@ -240,6 +258,7 @@ export const createBooking = async (req, res) => {
         await showData.save();
 
         if (walletAmountUsed > 0) {
+            // Trừ ví ngay để số dư này không thể đồng thời được dùng cho booking khác.
             await debitWallet({
                 userId,
                 bookingId: booking._id,
@@ -259,6 +278,7 @@ export const createBooking = async (req, res) => {
             });
         }
 
+        // Không cần mở cổng thanh toán khi ví QuickShow đã thanh toán đủ toàn bộ đơn.
         if (stripeAmount <= 0) {
             await confirmBookingPaid(booking, {
                 actor: STATUS_ACTOR.SYSTEM,
@@ -285,6 +305,7 @@ export const createBooking = async (req, res) => {
             });
         }
 
+        // ZaloPay trả về URL/token riêng; lưu toàn bộ thông tin cần cho callback và đối soát sau đó.
         if (selectedPaymentProvider === PAYMENT_PROVIDER.ZALOPAY_TEST) {
             const zalopayPayment = await createZaloPayPayment({
                 booking,
@@ -308,6 +329,7 @@ export const createBooking = async (req, res) => {
             });
             await booking.save();
 
+            // Inngest sẽ kiểm tra lại khi hết thời gian giữ ghế và xử lý booking chưa thanh toán.
             await inngest.send({
                 name: "app/checkpayment",
                 data: {
@@ -330,6 +352,7 @@ export const createBooking = async (req, res) => {
 
         const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
         const lineItems = buildCheckoutLineItems(booking);
+        // Stripe vẫn nhận tổng giá trị line items; coupon một lần khấu trừ đúng phần đã trả bằng ví.
         const walletDiscount = walletAmountUsed > 0
             ? await stripeInstance.coupons.create({
                 amount_off: Math.floor(walletAmountUsed),
@@ -365,6 +388,7 @@ export const createBooking = async (req, res) => {
         });
         await booking.save();
 
+        // Lên lịch kiểm tra thanh toán để booking hết hạn không tiếp tục giữ ghế.
         await inngest.send({
             name: "app/checkpayment",
             data: {
@@ -384,6 +408,7 @@ export const createBooking = async (req, res) => {
             expiresAt: booking.expiresAt
         });
     } catch (error) {
+        // Đây là rollback bù trừ vì các thao tác MongoDB, ví và cổng thanh toán không nằm trong một transaction chung.
         if (booking) {
             try {
                 if (debitedWalletAmount > 0) {
@@ -420,6 +445,7 @@ export const createBooking = async (req, res) => {
     }
 };
 
+// Trả các ghế đã thanh toán thành công; ghế đang giữ tạm không được tính là ghế đã bán.
 export const getOccupiedSeats = async (req, res) => {
     try {
         const { showId } = req.params;

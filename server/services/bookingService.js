@@ -5,6 +5,7 @@ import Concession, { CONCESSION_STATUS } from "../models/Concession.js";
 import { getShowtimeLifecycle } from "./showtimeService.js";
 import { creditWallet, reverseWalletDebit } from "./walletService.js";
 
+// Trạng thái nghiệp vụ mô tả vòng đời của một booking.
 export const BOOKING_STATUS = {
     PENDING_PAYMENT: "PENDING_PAYMENT",
     CONFIRMED: "CONFIRMED",
@@ -16,6 +17,7 @@ export const BOOKING_STATUS = {
     NO_SHOW: "NO_SHOW"
 };
 
+// Trạng thái riêng của khoản thanh toán/hoàn tiền.
 export const PAYMENT_STATUS = {
     UNPAID: "UNPAID",
     PAID: "PAID",
@@ -25,17 +27,20 @@ export const PAYMENT_STATUS = {
     REFUND_FAILED: "REFUND_FAILED"
 };
 
+// Các cổng thanh toán được hệ thống hỗ trợ.
 export const PAYMENT_PROVIDER = {
     STRIPE_TEST: "STRIPE_TEST",
     ZALOPAY_TEST: "ZALOPAY_TEST"
 };
 
+// Nơi khách nhận tiền hoàn.
 export const REFUND_METHOD = {
     STRIPE: "STRIPE",
     WALLET: "WALLET",
     MIXED: "MIXED"
 };
 
+// Tác nhân gây ra một lần thay đổi trạng thái để ghi lịch sử.
 export const STATUS_ACTOR = {
     USER: "USER",
     ADMIN: "ADMIN",
@@ -44,6 +49,7 @@ export const STATUS_ACTOR = {
     ZALOPAY: "ZALOPAY"
 };
 
+// Mỗi cổng thanh toán có thời gian giữ ghế khác nhau.
 export const STRIPE_PAYMENT_HOLD_MINUTES = 30;
 export const ZALOPAY_PAYMENT_HOLD_MINUTES = 10;
 export const PAYMENT_HOLD_MINUTES = STRIPE_PAYMENT_HOLD_MINUTES;
@@ -58,6 +64,7 @@ export const FULL_REFUND_RATE = 1;
 export const CHECK_IN_EARLY_WINDOW_MINUTES = 120;
 export const QR_TOKEN_PREFIX = "qsqr.v1";
 
+// Công thức tính giá theo loại ghế từ giá cơ sở của suất chiếu.
 const STRIPE_SEAT_TYPE_PRICING = {
     STANDARD: (basePrice) => basePrice,
     VIP: (basePrice) => basePrice + 20000,
@@ -67,12 +74,14 @@ const STRIPE_SEAT_TYPE_PRICING = {
 const MAX_CONCESSION_PER_ITEM = 3;
 const MAX_CONCESSION_TOTAL = 10;
 
+// Tạo mã booking dễ tra cứu từ thời gian và chuỗi ngẫu nhiên.
 export const createBookingCode = () => {
     const timestamp = Date.now().toString().slice(-6);
     const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
     return `QS${timestamp}${randomPart}`;
 };
 
+// Lấy khóa bí mật dùng để ký QR; ưu tiên khóa chuyên dụng.
 const getQrCheckInSecret = () => (
     process.env.QR_CHECK_IN_SECRET
     || process.env.JWT_SECRET
@@ -88,6 +97,7 @@ const base64UrlDecode = (value) => Buffer
     .from(value, "base64url")
     .toString("utf8");
 
+// Ký payload QR bằng HMAC-SHA256 để ngăn người dùng sửa dữ liệu trong QR.
 const signQrPayload = (payload) => {
     const secret = getQrCheckInSecret();
 
@@ -101,6 +111,7 @@ const signQrPayload = (payload) => {
         .digest("base64url");
 };
 
+// So sánh chữ ký theo thời gian cố định để hạn chế timing attack.
 const safeSignatureEquals = (left, right) => {
     const leftBuffer = Buffer.from(left || "");
     const rightBuffer = Buffer.from(right || "");
@@ -112,6 +123,7 @@ const safeSignatureEquals = (left, right) => {
     return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 };
 
+// Tạo token QR gồm phiên bản, payload booking và chữ ký xác thực.
 export const createCheckInQrToken = (booking) => {
     if (!booking?._id || !booking?.bookingCode || !booking?.show) {
         throw new Error("Booking không đủ dữ liệu để tạo QR.");
@@ -129,6 +141,7 @@ export const createCheckInQrToken = (booking) => {
     return `${QR_TOKEN_PREFIX}.${payload}.${signature}`;
 };
 
+// Kiểm tra cấu trúc/chữ ký QR rồi trả dữ liệu booking bên trong.
 export const verifyCheckInQrToken = (token = "") => {
     const parts = `${token}`.trim().split(".");
 
@@ -150,6 +163,7 @@ export const verifyCheckInQrToken = (token = "") => {
     }
 };
 
+// Thêm một mốc vào lịch sử trạng thái booking.
 export const appendBookingHistory = (booking, entry) => {
     booking.statusHistory = booking.statusHistory || [];
     booking.statusHistory.push({
@@ -161,6 +175,7 @@ export const appendBookingHistory = (booking, entry) => {
     });
 };
 
+// Đổi đồng bộ trạng thái booking, thanh toán, cờ isPaid và ghi lịch sử.
 export const setBookingStatuses = (booking, {
     bookingStatus,
     paymentStatus,
@@ -181,6 +196,7 @@ export const setBookingStatuses = (booking, {
     });
 };
 
+// Xác minh ghế thuộc sơ đồ phòng và chụp lại loại/giá từng ghế tại lúc đặt.
 export const buildSeatPricingSnapshot = (showData, selectedSeats) => {
     const seatCatalog = new Map();
 
@@ -213,6 +229,7 @@ export const buildSeatPricingSnapshot = (showData, selectedSeats) => {
     return { seatDetails, amount };
 };
 
+// Xác minh món còn bán, giới hạn số lượng và chụp lại giá/tên món tại lúc đặt.
 export const buildConcessionSnapshot = async (selectedConcessions = []) => {
     if (!Array.isArray(selectedConcessions) || selectedConcessions.length === 0) {
         return { concessionItems: [], concessionAmount: 0 };
@@ -276,6 +293,7 @@ export const buildConcessionSnapshot = async (selectedConcessions = []) => {
     return { concessionItems, concessionAmount };
 };
 
+// Ghép snapshot vé, món ăn và thông tin suất chiếu thành dữ liệu tạo Booking.
 export const buildBookingSnapshot = async ({
     showData,
     userId,
@@ -306,6 +324,7 @@ export const buildBookingSnapshot = async ({
     };
 };
 
+// Xóa các ghế khỏi danh sách đang giữ và/hoặc đã bán của suất chiếu.
 export const releaseSeats = async (showId, seatNumbers = [], {
     fromHeld = true,
     fromOccupied = true
@@ -337,6 +356,7 @@ export const releaseSeats = async (showId, seatNumbers = [], {
     return show;
 };
 
+// Khi thanh toán thành công, chuyển ghế từ heldSeats sang occupiedSeats.
 export const confirmSeatsAsOccupied = async (booking) => {
     if (!booking?.show || !Array.isArray(booking.bookedSeats) || booking.bookedSeats.length === 0) {
         return null;
@@ -363,6 +383,7 @@ export const confirmSeatsAsOccupied = async (booking) => {
     return show;
 };
 
+// Người dùng chỉ được hủy booking đã thanh toán trước giờ chiếu ít nhất 24 giờ.
 export const canUserCancelBooking = (booking, now = new Date()) => {
     if (booking.bookingStatus !== BOOKING_STATUS.CONFIRMED || booking.paymentStatus !== PAYMENT_STATUS.PAID) {
         return false;
@@ -374,6 +395,7 @@ export const canUserCancelBooking = (booking, now = new Date()) => {
     return diffHours >= USER_CANCELLATION_NOTICE_HOURS;
 };
 
+// Admin được hủy booking chờ thanh toán/đã xác nhận miễn là suất chưa bắt đầu.
 export const canAdminCancelBooking = (booking, now = new Date()) => {
     const showTime = new Date(booking.showDateTime || booking.show?.showDateTime);
 
@@ -391,6 +413,7 @@ export const canAdminCancelBooking = (booking, now = new Date()) => {
     ].includes(booking.bookingStatus);
 };
 
+// Điều kiện trạng thái cơ bản để booking có thể check-in.
 export const canCheckInBooking = (booking, showtime) => {
     if (booking.bookingStatus !== BOOKING_STATUS.CONFIRMED || booking.paymentStatus !== PAYMENT_STATUS.PAID) {
         return false;
@@ -403,6 +426,7 @@ export const canCheckInBooking = (booking, showtime) => {
     return showtime.status !== "CANCELLED";
 };
 
+// Kiểm tra đầy đủ trạng thái và cửa sổ thời gian trước khi check-in.
 export const assertBookingCanCheckIn = (booking, showtime, now = new Date()) => {
     if (!booking) {
         throw new Error("Không tìm thấy booking.");
@@ -432,6 +456,7 @@ export const assertBookingCanCheckIn = (booking, showtime, now = new Date()) => 
     }
 };
 
+// Chuyển booking sang CHECKED_IN và ghi cách check-in vào lịch sử.
 export const checkInBooking = async (booking, {
     checkedInBy,
     method = "BOOKING_CODE",
@@ -457,12 +482,15 @@ export const checkInBooking = async (booking, {
     return booking;
 };
 
+// Tạo Stripe client dùng chung cho các luồng đối soát và hoàn tiền.
 export const createStripeClient = () => new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Chuẩn hóa thông báo lỗi hoàn tiền từ Stripe hoặc lỗi ứng dụng.
 export const parseRefundError = (error) => {
     return error?.raw?.message || error?.message || "Không thể hoàn tiền trên Stripe.";
 };
 
+// Chính sách hiện tại: khách tự hủy nhận 80%, các trường hợp khác nhận 100% vào ví.
 export const getRefundPolicyForCancellation = (cancelledBy) => {
     if (cancelledBy === "USER") {
         return {
@@ -479,6 +507,7 @@ export const getRefundPolicyForCancellation = (cancelledBy) => {
     };
 };
 
+// Tính số tiền hoàn, phí hủy và chuẩn hóa tỷ lệ trong khoảng 0-1.
 export const calculateRefundBreakdown = (booking, refundRate = FULL_REFUND_RATE) => {
     const originalAmount = Math.max(Math.floor(Number(booking?.amount || 0)), 0);
     const normalizedRate = Math.min(Math.max(Number(refundRate) || 0, 0), 1);
@@ -492,6 +521,7 @@ export const calculateRefundBreakdown = (booking, refundRate = FULL_REFUND_RATE)
     };
 };
 
+// Đánh dấu booking chưa thanh toán là đã hủy, không phát sinh hoàn tiền.
 export const markBookingAsCancelled = (booking, {
     actor,
     cancelledBy,
@@ -517,6 +547,7 @@ export const markBookingAsCancelled = (booking, {
     });
 };
 
+// Chuyển booking đã trả tiền sang trạng thái chờ xử lý hoàn tiền.
 export const markBookingAsRefundPending = (booking, {
     actor,
     cancelledBy,
@@ -544,6 +575,7 @@ export const markBookingAsRefundPending = (booking, {
     });
 };
 
+// Ghi nhận hoàn tiền thành công và kết thúc vòng đời booking.
 export const markBookingAsRefunded = (booking, {
     actor,
     refund,
@@ -573,6 +605,7 @@ export const markBookingAsRefunded = (booking, {
     });
 };
 
+// Khôi phục booking về CONFIRMED khi hoàn tiền thất bại để có thể xử lý lại.
 export const markRefundFailed = (booking, {
     actor,
     reason
@@ -595,6 +628,7 @@ export const markRefundFailed = (booking, {
     });
 };
 
+// Hủy booking theo trạng thái thanh toán: hoàn ví đã dùng nếu chưa trả, hoặc hoàn tiền vào ví nếu đã trả.
 export const cancelBookingAndHandlePayment = async (booking, {
     actor,
     cancelledBy,
@@ -605,6 +639,7 @@ export const cancelBookingAndHandlePayment = async (booking, {
         PAYMENT_STATUS.REFUND_FAILED
     ].includes(booking.paymentStatus);
 
+    // Booking chưa thanh toán chỉ cần hoàn phần ví đã trừ và nhả ghế đang giữ.
     if (!isPaidBooking) {
         markBookingAsCancelled(booking, {
             actor,
@@ -644,6 +679,7 @@ export const cancelBookingAndHandlePayment = async (booking, {
     const refundBreakdown = calculateRefundBreakdown(booking, refundPolicy.refundRate);
     const refundMethod = REFUND_METHOD.WALLET;
 
+    // Lưu REFUND_PENDING trước khi cộng ví để trạng thái phản ánh đúng nếu bước hoàn tiền lỗi.
     markBookingAsRefundPending(booking, {
         actor,
         cancelledBy,
@@ -701,6 +737,7 @@ export const cancelBookingAndHandlePayment = async (booking, {
     }
 };
 
+// Xác nhận thanh toán theo cách idempotent rồi chuyển ghế giữ tạm thành ghế đã bán.
 export const confirmBookingPaid = async (booking, {
     actor = STATUS_ACTOR.STRIPE,
     note = "Stripe xác nhận thanh toán thành công.",
@@ -737,6 +774,7 @@ export const confirmBookingPaid = async (booking, {
     return booking;
 };
 
+// Chủ động hỏi Stripe để cập nhật booking khi webhook chưa được nhận hoặc xử lý kịp.
 export const syncBookingPaymentWithStripe = async (booking) => {
     if (!booking?.stripeSessionId) {
         return { updated: false, booking };
@@ -763,6 +801,7 @@ export const syncBookingPaymentWithStripe = async (booking) => {
     return { updated: true, booking: updatedBooking, session };
 };
 
+// Suy ra và bổ sung trạng thái cho booking cũ được tạo trước khi hệ thống quản lý trạng thái đầy đủ.
 export const reconcileLegacyBookingState = async (booking) => {
     if (!booking) {
         return { updated: false, booking };

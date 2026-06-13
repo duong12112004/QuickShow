@@ -20,6 +20,7 @@ import { getShowtimeLifecycle } from "../services/showtimeService.js";
 import { getWalletSummary } from "../services/walletService.js";
 import { queryZaloPayOrder } from "../services/zalopayService.js";
 
+// Lấy ID người dùng hiện tại từ Clerk và chặn request chưa đăng nhập.
 const ensureAuthenticatedUser = (req) => {
     const userId = req.auth?.()?.userId;
 
@@ -30,6 +31,7 @@ const ensureAuthenticatedUser = (req) => {
     return userId;
 };
 
+// Trả lịch sử booking của người dùng, đồng bộ trạng thái thanh toán và gắn quyền đánh giá phim.
 export const getUserBookings = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -41,6 +43,7 @@ export const getUserBookings = async (req, res) => {
             })
             .sort({ createdAt: -1 });
 
+        // Sửa trạng thái dữ liệu cũ và kiểm tra Stripe phòng trường hợp webhook chưa cập nhật kịp.
         for (const booking of bookings) {
             try {
                 await reconcileLegacyBookingState(booking);
@@ -84,6 +87,7 @@ export const getUserBookings = async (req, res) => {
                 && booking.show
                 && getShowtimeLifecycle(booking.show) === "ENDED";
 
+            // FE dùng hai trường bổ sung này để hiển thị đánh giá cũ hoặc nút đánh giá mới.
             return {
                 ...plainBooking,
                 quickShowRating: userRating,
@@ -98,6 +102,7 @@ export const getUserBookings = async (req, res) => {
     }
 };
 
+// Trả số dư và lịch sử giao dịch ví, hỗ trợ phân trang và lọc loại/trạng thái giao dịch.
 export const getMyWallet = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -119,6 +124,7 @@ export const getMyWallet = async (req, res) => {
     }
 };
 
+// Tạo QR check-in có chữ ký cho booking đã thanh toán và xác nhận.
 export const getMyBookingQr = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -152,12 +158,14 @@ export const getMyBookingQr = async (req, res) => {
     }
 };
 
+// Chủ động đối soát thanh toán khi người dùng quay lại từ Stripe hoặc ZaloPay.
 export const confirmMyBookingPayment = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
         const sessionId = `${req.body?.sessionId || ""}`.trim();
         const zalopayAppTransId = `${req.body?.zalopayAppTransId || req.body?.appTransId || ""}`.trim();
 
+        // ZaloPay được đối soát bằng mã giao dịch ứng dụng.
         if (zalopayAppTransId) {
             const booking = await Booking.findOne({
                 user: userId,
@@ -187,6 +195,7 @@ export const confirmMyBookingPayment = async (req, res) => {
             const paidAmount = Number(queryResult.amount || 0);
             const expectedAmount = Number(booking.stripeAmount || 0);
 
+            // Không xác nhận booking nếu số tiền cổng thanh toán trả về không khớp.
             if (paidAmount !== expectedAmount) {
                 await booking.save();
 
@@ -274,6 +283,7 @@ export const confirmMyBookingPayment = async (req, res) => {
     }
 };
 
+// Hủy booking của chính người dùng, xử lý hoàn tiền và phát sự kiện nhả ghế/email.
 export const cancelMyBooking = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -333,6 +343,7 @@ export const cancelMyBooking = async (req, res) => {
     }
 };
 
+// Bật/tắt một phim trong danh sách yêu thích lưu tại privateMetadata của Clerk.
 export const updateFavorite = async (req, res) => {
     try {
         const { movieId } = req.body;
@@ -359,6 +370,7 @@ export const updateFavorite = async (req, res) => {
     }
 };
 
+// Lấy chi tiết các phim có ID nằm trong danh sách yêu thích của người dùng.
 export const getFavorites = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);

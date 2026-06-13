@@ -6,6 +6,7 @@ import Concession, {
 const categoryValues = Object.values(CONCESSION_CATEGORY);
 const statusValues = Object.values(CONCESSION_STATUS);
 
+// Chuẩn hóa và kiểm tra dữ liệu món ăn từ request; partial=true cho phép cập nhật một phần.
 const parseConcessionPayload = (body = {}, { partial = false } = {}) => {
     const payload = {};
 
@@ -57,6 +58,7 @@ const parseConcessionPayload = (body = {}, { partial = false } = {}) => {
     return payload;
 };
 
+// Trả các món đang mở bán cho giao diện khách hàng, ưu tiên sortOrder thấp hơn.
 export const getActiveConcessions = async (req, res) => {
     try {
         const concessions = await Concession.find({ status: CONCESSION_STATUS.ACTIVE })
@@ -69,6 +71,7 @@ export const getActiveConcessions = async (req, res) => {
     }
 };
 
+// Trả toàn bộ món, bao gồm món đã ngừng bán, cho trang quản trị.
 export const getAdminConcessions = async (req, res) => {
     try {
         const concessions = await Concession.find({})
@@ -81,6 +84,7 @@ export const getAdminConcessions = async (req, res) => {
     }
 };
 
+// Kiểm tra payload rồi tạo món ăn/combo mới.
 export const createConcession = async (req, res) => {
     try {
         const payload = parseConcessionPayload(req.body);
@@ -97,6 +101,7 @@ export const createConcession = async (req, res) => {
     }
 };
 
+// Cập nhật các trường được gửi lên mà không bắt buộc client gửi lại toàn bộ món.
 export const updateConcession = async (req, res) => {
     try {
         const payload = parseConcessionPayload(req.body, { partial: true });
@@ -121,6 +126,7 @@ export const updateConcession = async (req, res) => {
     }
 };
 
+// Xóa món khỏi danh mục quản trị; snapshot món trong booking cũ vẫn được giữ.
 export const deleteConcession = async (req, res) => {
     try {
         const concession = await Concession.findByIdAndDelete(req.params.concessionId);

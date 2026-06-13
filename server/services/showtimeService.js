@@ -9,6 +9,7 @@ export const SHOWTIME_STATUS = {
     CANCELLED: "CANCELLED"
 };
 
+// Đọc một số bắt buộc lớn hơn 0, dùng cho giá vé và các giá trị dương.
 const parsePositiveNumber = (value, fieldName) => {
     const numericValue = Number(value);
 
@@ -19,6 +20,7 @@ const parsePositiveNumber = (value, fieldName) => {
     return numericValue;
 };
 
+// Đọc số nguyên không âm, dùng cho thời gian dọn phòng.
 const parseNonNegativeInteger = (value, fieldName) => {
     const numericValue = Number(value);
 
@@ -29,6 +31,7 @@ const parseNonNegativeInteger = (value, fieldName) => {
     return numericValue;
 };
 
+// Chuyển giá trị request thành Date hợp lệ.
 const parseShowDateTime = (value) => {
     if (!value) {
         throw new Error("Thời gian chiếu là trường bắt buộc.");
@@ -43,6 +46,7 @@ const parseShowDateTime = (value) => {
     return parsedDate;
 };
 
+// Chuyển định dạng tạo suất cũ [{ date, time: [] }] thành mảng Date theo giờ Việt Nam.
 export const normalizeLegacyShowsInput = (showsInput = []) => {
     if (!Array.isArray(showsInput) || showsInput.length === 0) {
         throw new Error("Danh sách mốc chiếu không hợp lệ.");
@@ -64,6 +68,7 @@ export const normalizeLegacyShowsInput = (showsInput = []) => {
     });
 };
 
+// Kiểm tra và chuẩn hóa payload tạo một hoặc nhiều suất chiếu.
 export const validateCreateShowtimePayload = (body) => {
     const movieId = `${body.movieId || ""}`.trim();
     const roomId = `${body.roomId || ""}`.trim();
@@ -94,6 +99,7 @@ export const validateCreateShowtimePayload = (body) => {
     };
 };
 
+// Chỉ chuẩn hóa các trường được gửi lên khi cập nhật suất chiếu.
 export const validateUpdateShowtimePayload = (body) => {
     const payload = {};
 
@@ -124,6 +130,7 @@ export const validateUpdateShowtimePayload = (body) => {
     return payload;
 };
 
+// Bắt buộc admin nhập lý do khi hủy suất chiếu.
 export const validateCancelShowtimePayload = (body) => {
     const cancellationReason = `${body?.cancellationReason || ""}`.trim();
 
@@ -134,6 +141,7 @@ export const validateCancelShowtimePayload = (body) => {
     return { cancellationReason };
 };
 
+// Coi dữ liệu cũ chưa có status là suất chiếu SCHEDULED.
 export const buildScheduledShowtimeFilter = () => ({
     $or: [
         { status: SHOWTIME_STATUS.SCHEDULED },
@@ -142,27 +150,33 @@ export const buildScheduledShowtimeFilter = () => ({
     ]
 });
 
+// Thời điểm kết thúc bao gồm cả thời lượng phim và thời gian dọn phòng.
 export const calculateShowtimeEnd = (showDateTime, runtimeMinutes, cleanupMinutes = DEFAULT_CLEANUP_MINUTES) => {
     const start = new Date(showDateTime);
     return new Date(start.getTime() + (Number(runtimeMinutes) + Number(cleanupMinutes)) * 60 * 1000);
 };
 
+// Kiểm tra thời điểm bắt đầu đã nằm trong quá khứ hay chưa.
 export const isShowtimeInPast = (showDateTime, now = new Date()) => {
     return new Date(showDateTime).getTime() < now.getTime();
 };
 
+// Kiểm tra suất chiếu đã bắt đầu, bao gồm đúng thời điểm bắt đầu.
 export const hasStartedShowtime = (showDateTime, now = new Date()) => {
     return new Date(showDateTime).getTime() <= now.getTime();
 };
 
+// Cho biết suất đã có ghế bán hoặc đang được giữ, dùng để chặn sửa/xóa nguy hiểm.
 export const hasBookingsOrHeldSeats = (showtime) => {
     const occupiedCount = Object.keys(showtime?.occupiedSeats || {}).length;
     const heldCount = Object.keys(showtime?.heldSeats || {}).length;
     return occupiedCount > 0 || heldCount > 0;
 };
 
+// Số ghế đã thanh toán được lưu trong occupiedSeats.
 export const getPaidSeatCount = (showtime) => Object.keys(showtime?.occupiedSeats || {}).length;
 
+// Suy ra vòng đời hiện tại của suất chiếu từ trạng thái, giờ bắt đầu và giờ kết thúc.
 export const getShowtimeLifecycle = (showtime, now = new Date()) => {
     const startTime = new Date(showtime.showDateTime);
     const endTime = new Date(showtime.endDateTime || calculateShowtimeEnd(
@@ -186,6 +200,7 @@ export const getShowtimeLifecycle = (showtime, now = new Date()) => {
     return "UPCOMING";
 };
 
+// Xác minh phòng tồn tại và đang hoạt động trước khi xếp lịch chiếu.
 export const ensureRoomIsActive = async (roomId) => {
     const room = await Room.findById(roomId);
 
@@ -202,6 +217,7 @@ export const ensureRoomIsActive = async (roomId) => {
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
 
+// Header xác thực dùng chung cho các request TMDB.
 const buildTmdbConfig = () => ({
     headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
 });
@@ -217,6 +233,7 @@ const normalizeImdbRating = (value) => {
     return Number.isFinite(numericValue) ? numericValue : null;
 };
 
+// Ưu tiên trailer YouTube chính thức, sau đó trailer, teaser và video khả dụng đầu tiên.
 const pickTrailer = (...videoGroups) => {
     const videos = videoGroups
         .flatMap((group) => group?.results || [])
@@ -229,6 +246,7 @@ const pickTrailer = (...videoGroups) => {
         || null;
 };
 
+// Lấy danh sách đạo diễn không trùng từ credits của TMDB.
 const pickDirector = (credits) => {
     const directors = (credits?.crew || [])
         .filter((member) => member.job === "Director")
@@ -238,6 +256,7 @@ const pickDirector = (credits) => {
     return [...new Set(directors)].join(", ");
 };
 
+// Tìm nhãn độ tuổi của một quốc gia trong release_dates.
 const pickCertificationFromCountry = (releaseDates, countryCode) => {
     const countryRelease = (releaseDates?.results || []).find((item) => item.iso_3166_1 === countryCode);
     const certification = countryRelease?.release_dates
@@ -247,6 +266,7 @@ const pickCertificationFromCountry = (releaseDates, countryCode) => {
     return certification || "";
 };
 
+// Ưu tiên nhãn độ tuổi Việt Nam, nếu thiếu thì dùng nhãn Hoa Kỳ.
 const pickCertification = (releaseDates) => {
     const vietnamCertification = pickCertificationFromCountry(releaseDates, "VN");
 
@@ -272,6 +292,7 @@ const pickCertification = (releaseDates) => {
     };
 };
 
+// Lấy điểm IMDb từ OMDb; lỗi nguồn ngoài không được làm thất bại việc tạo phim.
 const fetchOmdbRating = async (imdbId) => {
     if (!process.env.OMDB_API_KEY || !imdbId) {
         return {
@@ -308,6 +329,7 @@ const fetchOmdbRating = async (imdbId) => {
     }
 };
 
+// Ghép metadata tiếng Việt/Anh từ TMDB và điểm IMDb từ OMDb thành document Movie hoàn chỉnh.
 const buildMoviePayload = async (movieId) => {
     const [viResponse, enResponse] = await Promise.all([
         axios.get(`${TMDB_API_BASE_URL}/movie/${movieId}`, {
@@ -365,6 +387,7 @@ const buildMoviePayload = async (movieId) => {
     };
 };
 
+// Dữ liệu phim cũ thiếu các trường quan trọng sẽ được tải lại từ nguồn ngoài.
 const shouldRefreshMovieMetadata = (movie) => {
     return !movie.titleVi
         || !movie.overviewVi
@@ -374,6 +397,7 @@ const shouldRefreshMovieMetadata = (movie) => {
         || !movie.certification;
 };
 
+// Lấy phim trong database; nếu chưa có hoặc thiếu metadata thì đồng bộ từ TMDB/OMDb.
 export const ensureMovieExists = async (movieId) => {
     let movie = await Movie.findById(movieId);
 
@@ -392,12 +416,14 @@ export const ensureMovieExists = async (movieId) => {
     return movie;
 };
 
+// Chặn tạo hoặc chuyển suất chiếu về thời điểm đã qua.
 export const assertShowtimeNotInPast = (showDateTime, now = new Date()) => {
     if (isShowtimeInPast(showDateTime, now)) {
         throw new Error("Không thể tạo hoặc cập nhật suất chiếu trong quá khứ.");
     }
 };
 
+// Lấy giờ kết thúc đã lưu hoặc tính lại cho dữ liệu suất chiếu cũ.
 const getExistingShowtimeEnd = (showtime) => {
     return new Date(showtime.endDateTime || calculateShowtimeEnd(
         showtime.showDateTime,
@@ -406,6 +432,7 @@ const getExistingShowtimeEnd = (showtime) => {
     ));
 };
 
+// Chặn suất mới đè lịch các suất đã lưu trong cùng phòng, gồm cả thời gian dọn phòng.
 export const assertNoShowtimeOverlap = async ({
     roomId,
     showDateTime,
@@ -457,6 +484,7 @@ export const assertNoShowtimeOverlap = async ({
     }
 };
 
+// Chặn các suất mới trong cùng một request đè lịch lẫn nhau trước khi lưu database.
 export const assertNoLocalShowtimeOverlap = ({
     draftShowtimes,
     showDateTime,
@@ -482,6 +510,7 @@ export const assertNoLocalShowtimeOverlap = ({
     }
 };
 
+// Tạo document suất chiếu với thời gian kết thúc và trạng thái ghế ban đầu.
 export const buildShowtimeSnapshot = ({
     movieId,
     roomId,
@@ -504,6 +533,7 @@ export const buildShowtimeSnapshot = ({
     heldSeats: {}
 });
 
+// Chuẩn hóa suất chiếu thành dữ liệu quản trị kèm vòng đời và số ghế.
 export const serializeAdminShowtime = (showtime, now = new Date()) => {
     const paidSeats = getPaidSeatCount(showtime);
     const heldSeats = Object.keys(showtime.heldSeats || {}).length;

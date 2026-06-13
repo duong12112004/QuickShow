@@ -7,6 +7,7 @@ export const WALLET_TRANSACTION_TYPE = {
     REVERSAL: "REVERSAL"
 };
 
+// Lấy ví của người dùng hoặc khởi tạo ví số dư 0 khi sử dụng lần đầu.
 export const getOrCreateWallet = async (userId) => {
     let wallet = await Wallet.findOne({ user: userId });
 
@@ -17,6 +18,7 @@ export const getOrCreateWallet = async (userId) => {
     return wallet;
 };
 
+// Trả số dư cùng lịch sử giao dịch đã phân trang và lọc.
 export const getWalletSummary = async (userId, {
     page = 1,
     limit = 8,
@@ -58,6 +60,7 @@ export const getWalletSummary = async (userId, {
     };
 };
 
+// Cộng tiền vào ví bằng phép cập nhật nguyên tử và ghi giao dịch CREDIT.
 export const creditWallet = async ({
     userId,
     bookingId = null,
@@ -89,6 +92,7 @@ export const creditWallet = async ({
     });
 };
 
+// Trừ tiền chỉ khi số dư đủ; điều kiện balance trong query ngăn số dư bị âm khi có request đồng thời.
 export const debitWallet = async ({
     userId,
     bookingId = null,
@@ -124,6 +128,7 @@ export const debitWallet = async ({
     });
 };
 
+// Hoàn tác một lần trừ ví trước đó và ghi giao dịch REVERSAL để giữ lịch sử đối soát.
 export const reverseWalletDebit = async ({
     userId,
     bookingId = null,

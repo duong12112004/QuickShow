@@ -7,11 +7,13 @@ const DEFAULT_CLIENT_URL = "https://quickshow-eight-rust.vercel.app";
 const DEFAULT_SERVER_URL = "https://quickshow-qy3z.onrender.com";
 const DEFAULT_ZALOPAY_EXPIRE_DURATION_SECONDS = 600;
 
+// ZaloPay yêu cầu app_trans_id bắt đầu bằng ngày yyMMdd theo giờ Việt Nam.
 const getVietnamDatePrefix = () => {
     const vietnamNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
     return vietnamNow.toISOString().slice(2, 10).replace(/-/g, "");
 };
 
+// Tạo MAC HMAC-SHA256 theo định dạng ZaloPay yêu cầu.
 const signHmacSha256 = (data, key) => (
     crypto
         .createHmac("sha256", key)
@@ -19,6 +21,7 @@ const signHmacSha256 = (data, key) => (
         .digest("hex")
 );
 
+// So sánh chữ ký theo thời gian cố định để hạn chế timing attack.
 const safeSignatureEquals = (left = "", right = "") => {
     const leftBuffer = Buffer.from(`${left}`);
     const rightBuffer = Buffer.from(`${right}`);
@@ -30,6 +33,7 @@ const safeSignatureEquals = (left = "", right = "") => {
     return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 };
 
+// Gom cấu hình ZaloPay từ biến môi trường và cung cấp giá trị mặc định cho sandbox.
 const getZaloPayConfig = () => {
     const clientUrl = (process.env.CLIENT_URL || DEFAULT_CLIENT_URL).replace(/\/$/, "");
     const serverUrl = (process.env.SERVER_URL || DEFAULT_SERVER_URL).replace(/\/$/, "");
@@ -49,6 +53,7 @@ const getZaloPayConfig = () => {
     };
 };
 
+// Chặn gọi ZaloPay khi thiếu các khóa bắt buộc.
 const assertZaloPayConfig = (config) => {
     const missing = ["appId", "key1", "key2"].filter((key) => !config[key]);
 
@@ -57,6 +62,7 @@ const assertZaloPayConfig = (config) => {
     }
 };
 
+// Tạo đơn ZaloPay đã ký MAC và trả URL/token thanh toán cho booking.
 export const createZaloPayPayment = async ({ booking, amount, appUser }) => {
     const config = getZaloPayConfig();
     assertZaloPayConfig(config);
@@ -103,6 +109,7 @@ export const createZaloPayPayment = async ({ booking, amount, appUser }) => {
         order.item
     ].join("|");
 
+    // key1 dùng để ký request chủ động gửi từ QuickShow sang ZaloPay.
     order.mac = signHmacSha256(macData, config.key1);
 
     const { data } = await axios.post(config.createOrderEndpoint, null, {
@@ -120,6 +127,7 @@ export const createZaloPayPayment = async ({ booking, amount, appUser }) => {
     };
 };
 
+// Xác thực MAC callback bằng key2 trước khi tin dữ liệu giao dịch ZaloPay gửi về.
 export const verifyZaloPayCallback = (payload = {}) => {
     const config = getZaloPayConfig();
     assertZaloPayConfig(config);
@@ -137,6 +145,7 @@ export const verifyZaloPayCallback = (payload = {}) => {
     };
 };
 
+// Chủ động truy vấn trạng thái đơn ZaloPay khi callback chưa đến hoặc người dùng quay lại FE.
 export const queryZaloPayOrder = async (appTransId) => {
     const config = getZaloPayConfig();
     assertZaloPayConfig(config);

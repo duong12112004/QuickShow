@@ -8,8 +8,10 @@ import {
     confirmBookingPaid
 } from "../services/bookingService.js";
 
+// Tạo Stripe client từ secret key của server.
 const getStripeInstance = () => new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Báo realtime để các client đang xem suất chiếu cập nhật ghế đã bán.
 const emitBookedSeats = (req, booking) => {
     const io = req.app.get("io");
 
@@ -19,6 +21,7 @@ const emitBookedSeats = (req, booking) => {
     }
 };
 
+// Xác nhận booking từ Stripe Checkout theo cách idempotent, tránh xử lý lại booking đã hoàn tất.
 const handleSuccessfulCheckoutSession = async (req, session) => {
     const bookingId = session?.metadata?.bookingId;
 
@@ -40,6 +43,7 @@ const handleSuccessfulCheckoutSession = async (req, session) => {
         return;
     }
 
+    // Service chuyển ghế từ held sang occupied và cập nhật trạng thái booking/payment.
     await confirmBookingPaid(booking, {
         actor: STATUS_ACTOR.STRIPE,
         note: "Stripe xác nhận thanh toán thành công.",
@@ -54,12 +58,14 @@ const handleSuccessfulCheckoutSession = async (req, session) => {
     });
 };
 
+// Xác thực chữ ký rồi xử lý các webhook Stripe liên quan đến thanh toán thành công.
 export const stripeWebhooks = async (req, res) => {
     const stripeInstance = getStripeInstance();
     const sig = req.headers["stripe-signature"];
 
     let event;
 
+    // req.body phải là raw body để Stripe có thể kiểm tra chữ ký webhook chính xác.
     try {
         event = stripeInstance.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     } catch (error) {
@@ -76,6 +82,7 @@ export const stripeWebhooks = async (req, res) => {
             }
 
             case "payment_intent.succeeded": {
+                // Tìm ngược Checkout Session để lấy metadata chứa bookingId.
                 const paymentIntent = event.data.object;
                 const sessionList = await stripeInstance.checkout.sessions.list({
                     payment_intent: paymentIntent.id

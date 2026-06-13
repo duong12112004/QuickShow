@@ -9,6 +9,7 @@ import {
 } from "../services/bookingService.js";
 import { verifyZaloPayCallback } from "../services/zalopayService.js";
 
+// Báo realtime để các client đang xem suất chiếu cập nhật ghế đã bán.
 const emitBookedSeats = (req, booking) => {
     const io = req.app.get("io");
 
@@ -17,10 +18,12 @@ const emitBookedSeats = (req, booking) => {
     }
 };
 
+// Nhận callback từ ZaloPay, xác thực MAC và xác nhận booking đã thanh toán.
 export const zalopayCallback = async (req, res) => {
     try {
         const { isValid, data } = verifyZaloPayCallback(req.body || {});
 
+        // Không tin dữ liệu callback trước khi chữ ký MAC được xác thực.
         if (!isValid) {
             return res.json({
                 return_code: -1,
@@ -43,6 +46,7 @@ export const zalopayCallback = async (req, res) => {
         const paidAmount = Number(data.amount || 0);
         const expectedAmount = Number(booking.stripeAmount || 0);
 
+        // Chặn việc xác nhận booking nếu số tiền callback khác số tiền cần thanh toán.
         if (paidAmount !== expectedAmount) {
             appendBookingHistory(booking, {
                 status: booking.bookingStatus,
@@ -74,6 +78,7 @@ export const zalopayCallback = async (req, res) => {
             });
         }
 
+        // confirmBookingPaid xử lý trạng thái booking và chuyển ghế giữ tạm thành ghế đã bán.
         await confirmBookingPaid(booking, {
             actor: STATUS_ACTOR.ZALOPAY,
             note: "ZaloPay xac nhan thanh toan thanh cong."

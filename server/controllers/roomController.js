@@ -9,6 +9,7 @@ import {
     validateRoomPayload
 } from "../services/roomService.js";
 
+// Tạo bộ phòng mẫu cho môi trường phát triển; chỉ chạy khi chưa có suất chiếu để tránh mất liên kết.
 export const seedCinemaData = async (req, res) => {
     try {
         const totalShowsCount = await Show.countDocuments();
@@ -49,6 +50,7 @@ export const seedCinemaData = async (req, res) => {
     }
 };
 
+// Trả danh sách phòng kèm số liệu sử dụng để admin biết phòng nào có thể sửa hoặc xóa.
 export const getAllRooms = async (req, res) => {
     try {
         const rooms = await Room.find({})
@@ -63,6 +65,7 @@ export const getAllRooms = async (req, res) => {
     }
 };
 
+// Trả chi tiết một phòng, số suất đã dùng và quyền sửa sơ đồ/xóa phòng.
 export const getRoomDetail = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -91,6 +94,7 @@ export const getRoomDetail = async (req, res) => {
     }
 };
 
+// Tạo phòng mới và sinh sơ đồ ghế mặc định theo loại phòng.
 export const createRoom = async (req, res) => {
     try {
         const payload = validateRoomPayload(req.body, { requireName: true });
@@ -109,6 +113,7 @@ export const createRoom = async (req, res) => {
     }
 };
 
+// Cập nhật thông tin phòng; chặn thay đổi ảnh hưởng ghế khi phòng còn suất chiếu sắp tới.
 export const updateRoom = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -126,6 +131,7 @@ export const updateRoom = async (req, res) => {
         const isPuttingRoomUnavailable = payload.status && payload.status !== "ACTIVE" && payload.status !== room.status;
         const shouldRegenerateSeatMap = isSeatMapChanging || isRoomTypeChanging;
 
+        // Sửa loại/sơ đồ phòng sẽ làm mã ghế của các suất chiếu tương lai không còn đáng tin cậy.
         if (shouldRegenerateSeatMap && usage.futureShowsCount > 0) {
             return res.json({
                 success: false,
@@ -158,6 +164,7 @@ export const updateRoom = async (req, res) => {
     }
 };
 
+// Chỉ đổi trạng thái khai thác và ghi chú bảo trì, không sửa các thông tin khác của phòng.
 export const updateRoomStatus = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -197,6 +204,7 @@ export const updateRoomStatus = async (req, res) => {
     }
 };
 
+// Chỉ xóa phòng chưa từng gắn với suất chiếu; phòng đã sử dụng phải chuyển sang INACTIVE.
 export const deleteRoom = async (req, res) => {
     try {
         const { roomId } = req.params;

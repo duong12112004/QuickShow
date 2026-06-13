@@ -3,6 +3,7 @@ import MovieReview, { REVIEW_STATUS } from "../models/MovieReview.js";
 import { BOOKING_STATUS, PAYMENT_STATUS } from "./bookingService.js";
 import { getShowtimeLifecycle } from "./showtimeService.js";
 
+// Tổng hợp điểm trung bình từ các đánh giá đã xác minh và đang hiển thị, nhóm theo ID phim.
 export const buildReviewSummaryMap = async (movieIds = []) => {
     const normalizedMovieIds = [...new Set(movieIds.map((movieId) => `${movieId || ""}`).filter(Boolean))];
 
@@ -37,6 +38,7 @@ export const buildReviewSummaryMap = async (movieIds = []) => {
     ]));
 };
 
+// Gắn điểm QuickShow và số lượt đánh giá vào từng phim để controller trả thẳng cho FE.
 export const attachReviewSummaries = async (movies = []) => {
     const summaryMap = await buildReviewSummaryMap(movies.map((movie) => movie?._id));
 
@@ -52,11 +54,13 @@ export const attachReviewSummaries = async (movies = []) => {
     });
 };
 
+// Lấy điểm tổng hợp của riêng một phim.
 export const getMovieReviewSummary = async (movieId) => {
     const summaryMap = await buildReviewSummaryMap([movieId]);
     return summaryMap.get(`${movieId}`) || { averageRating: null, ratingCount: 0 };
 };
 
+// Xác minh booking thuộc người dùng, đã trả tiền, suất chiếu đã kết thúc và chưa từng chấm điểm.
 export const ensureReviewableBooking = async ({ userId, movieId = "", bookingId }) => {
     const booking = await Booking.findOne({ _id: bookingId, user: userId })
         .populate({

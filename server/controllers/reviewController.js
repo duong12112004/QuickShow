@@ -7,6 +7,7 @@ import {
     getMovieReviewSummary
 } from "../services/reviewService.js";
 
+// Lấy ID người dùng đã đăng nhập từ Clerk.
 const ensureAuthenticatedUser = (req) => {
     const userId = req.auth?.()?.userId;
 
@@ -17,8 +18,10 @@ const ensureAuthenticatedUser = (req) => {
     return userId;
 };
 
+// Chuẩn hóa nội dung bình luận trước khi lưu hoặc tìm kiếm.
 const normalizeComment = (value) => `${value || ""}`.trim();
 
+// Chỉ chấp nhận điểm nguyên trong thang 1-10.
 const normalizeRating = (value) => {
     const rating = Number(value);
 
@@ -29,6 +32,7 @@ const normalizeRating = (value) => {
     return rating;
 };
 
+// Lưu tên và ảnh tại thời điểm review để không phải gọi Clerk mỗi lần hiển thị.
 const getUserSnapshot = async (userId) => {
     try {
         const user = await clerkClient.users.getUser(userId);
@@ -46,6 +50,7 @@ const getUserSnapshot = async (userId) => {
     }
 };
 
+// Chỉ trả các trường review mà FE/admin cần sử dụng.
 const serializeReview = (review) => ({
     _id: review._id,
     movie: review.movie,
@@ -66,6 +71,7 @@ const serializeReview = (review) => ({
     show: review.show
 });
 
+// Trả tối đa 100 bình luận công khai mới nhất của một phim.
 export const getMovieReviews = async (req, res) => {
     try {
         const { movieId } = req.params;
@@ -91,6 +97,7 @@ export const getMovieReviews = async (req, res) => {
     }
 };
 
+// Tạo bình luận tự do; không yêu cầu người dùng đã mua vé nên không được xác minh.
 export const createMovieComment = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -137,6 +144,7 @@ export const createMovieComment = async (req, res) => {
     }
 };
 
+// Chấm điểm phim từ một booking hợp lệ, mỗi booking chỉ được dùng đánh giá một lần.
 export const rateBooking = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -181,6 +189,7 @@ export const rateBooking = async (req, res) => {
     }
 };
 
+// Gửi đồng thời điểm và bình luận từ một booking đã đủ điều kiện đánh giá.
 export const submitBookingReview = async (req, res) => {
     try {
         const userId = ensureAuthenticatedUser(req);
@@ -231,6 +240,7 @@ export const submitBookingReview = async (req, res) => {
     }
 };
 
+// Trả điểm trung bình và số lượt đánh giá cho nhiều phim trong một request.
 export const getReviewSummaries = async (req, res) => {
     try {
         const movieIds = `${req.query?.movieIds || ""}`
@@ -256,6 +266,7 @@ export const getReviewSummaries = async (req, res) => {
     }
 };
 
+// Trả danh sách review cho admin, hỗ trợ lọc trạng thái và tìm kiếm nội dung.
 export const getAdminReviews = async (req, res) => {
     try {
         const { status = "ALL", q = "" } = req.query || {};
@@ -299,6 +310,7 @@ export const getAdminReviews = async (req, res) => {
     }
 };
 
+// Ẩn review khỏi phía khách hàng và lưu người/lý do thực hiện.
 export const hideReview = async (req, res) => {
     try {
         const adminId = ensureAuthenticatedUser(req);
@@ -322,6 +334,7 @@ export const hideReview = async (req, res) => {
     }
 };
 
+// Khôi phục review đã ẩn và xóa thông tin ẩn trước đó.
 export const restoreReview = async (req, res) => {
     try {
         const review = await MovieReview.findById(req.params.reviewId);

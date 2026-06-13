@@ -5,12 +5,14 @@ export const ROOM_TYPES = ['2D', '3D', 'IMAX', 'GOLD_CLASS', 'SWEETBOX'];
 export const ROOM_STATUSES = ['ACTIVE', 'MAINTENANCE', 'INACTIVE'];
 export const SEAT_TYPES = ['STANDARD', 'VIP', 'COUPLE', 'EMPTY'];
 
+// Ánh xạ nhiều loại phòng sang một mẫu sơ đồ ghế dùng chung.
 export const getTemplateForRoomType = (roomType = '2D') => {
     if (roomType === 'IMAX') return 'IMAX';
     if (roomType === 'GOLD_CLASS' || roomType === 'SWEETBOX') return 'GOLD_CLASS';
     return 'STANDARD';
 };
 
+// Sinh sơ đồ mặc định cho phòng 2D/3D với ghế thường, VIP, ghế đôi và lối đi.
 const generateStandardMap = () => {
     const seatMap = [];
     const rows = ['A', 'B', 'SPACE1', 'C', 'D', 'E', 'SPACE2', 'F', 'G'];
@@ -39,6 +41,7 @@ const generateStandardMap = () => {
     return seatMap;
 };
 
+// Sinh sơ đồ IMAX lớn hơn mẫu tiêu chuẩn.
 const generateIMAXMap = () => {
     const seatMap = [];
     const rows = ['A', 'B', 'C', 'SPACE1', 'D', 'E', 'F', 'G', 'SPACE2', 'H', 'I'];
@@ -67,6 +70,7 @@ const generateIMAXMap = () => {
     return seatMap;
 };
 
+// Sinh sơ đồ ít ghế, ưu tiên VIP/ghế đôi cho Gold Class và Sweetbox.
 const generateGoldClassMap = () => {
     const seatMap = [];
     const rows = ['A', 'B', 'C', 'SPACE1', 'D', 'E'];
@@ -94,6 +98,7 @@ const generateGoldClassMap = () => {
     return seatMap;
 };
 
+// Chọn mẫu phù hợp rồi sinh sơ đồ ghế cho loại phòng.
 export const generateSeatMapByRoomType = (roomType = '2D') => {
     const template = getTemplateForRoomType(roomType);
 
@@ -102,6 +107,7 @@ export const generateSeatMapByRoomType = (roomType = '2D') => {
     return generateStandardMap();
 };
 
+// Chuẩn hóa mã hàng/ghế và chặn hàng, ghế hoặc loại ghế không hợp lệ/trùng nhau.
 export const normalizeSeatMap = (seatMap = []) => {
     if (!Array.isArray(seatMap) || seatMap.length === 0) {
         throw new Error("Sơ đồ ghế phải là một mảng và không được để trống.");
@@ -152,6 +158,7 @@ export const normalizeSeatMap = (seatMap = []) => {
     });
 };
 
+// Đếm số ghế từng loại và capacity; vị trí EMPTY không được tính vào sức chứa.
 export const buildSeatLayoutStats = (seatMap = []) => {
     const stats = {
         standard: 0,
@@ -176,6 +183,7 @@ export const buildSeatLayoutStats = (seatMap = []) => {
     };
 };
 
+// Tính lại các trường dẫn xuất trước khi Room được validate/lưu vào database.
 export const applyRoomDerivedFields = (roomDoc) => {
     const normalizedSeatMap = normalizeSeatMap(roomDoc.seatMap || []);
     const seatStats = buildSeatLayoutStats(normalizedSeatMap);
@@ -199,6 +207,7 @@ export const applyRoomDerivedFields = (roomDoc) => {
     }
 };
 
+// Chuẩn hóa các trường phòng từ request và chỉ trả những trường được phép cập nhật.
 export const validateRoomPayload = (body, options = {}) => {
     const { requireName = false } = options;
     const payload = {};
@@ -244,6 +253,7 @@ export const validateRoomPayload = (body, options = {}) => {
     return payload;
 };
 
+// Chuyển lỗi trùng unique name của MongoDB thành thông báo dễ hiểu.
 export const buildRoomErrorMessage = (fallbackMessage, error) => {
     if (error?.code === 11000) {
         return "Tên phòng chiếu đã tồn tại trong hệ thống.";
@@ -252,6 +262,7 @@ export const buildRoomErrorMessage = (fallbackMessage, error) => {
     return `${fallbackMessage}: ${error.message}`;
 };
 
+// Đếm lịch sử sử dụng và các suất tương lai của một phòng.
 export const getRoomUsage = async (roomId) => {
     const now = new Date();
 
@@ -271,6 +282,7 @@ export const getRoomUsage = async (roomId) => {
     };
 };
 
+// Gắn số liệu sử dụng vào cả danh sách phòng bằng aggregation để tránh query từng phòng.
 export const enrichRoomsWithUsage = async (rooms) => {
     const now = new Date();
     const roomIds = rooms.map((room) => room._id);

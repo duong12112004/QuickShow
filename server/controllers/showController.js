@@ -16,6 +16,7 @@ import {
 } from "../services/showtimeService.js";
 import { attachReviewSummaries, getMovieReviewSummary } from "../services/reviewService.js";
 
+// Lấy danh sách phim đang chiếu trực tiếp từ TMDB để admin chọn phim.
 export const getNowPlayingMovies = async (req, res) => {
     try {
         const { data } = await axios.get("https://api.themoviedb.org/3/movie/now_playing", {
@@ -29,6 +30,7 @@ export const getNowPlayingMovies = async (req, res) => {
     }
 };
 
+// Tạo một hoặc nhiều suất chiếu cho cùng phim/phòng sau khi kiểm tra trùng lịch.
 export const addShow = async (req, res) => {
     try {
         const { movieId, roomId, basePrice, cleanupMinutes, showtimes } = validateCreateShowtimePayload(req.body);
@@ -38,6 +40,7 @@ export const addShow = async (req, res) => {
 
         const showsToCreate = [];
 
+        // Kiểm tra cả trùng lịch trong request hiện tại và trùng với dữ liệu đã lưu.
         for (const showDateTime of showtimes) {
             assertShowtimeNotInPast(showDateTime);
             assertNoLocalShowtimeOverlap({
@@ -79,6 +82,7 @@ export const addShow = async (req, res) => {
     }
 };
 
+// Trả danh sách phim có ít nhất một suất chiếu tương lai để hiển thị trên trang khách hàng.
 export const getShows = async (req, res) => {
     try {
         const shows = await Show.find({
@@ -91,6 +95,7 @@ export const getShows = async (req, res) => {
 
         const uniqueMoviesMap = new Map();
 
+        // Một phim có thể có nhiều suất chiếu nhưng chỉ xuất hiện một lần trong danh sách phim.
         shows
             .filter((show) => show.room && (!show.room.status || show.room.status === "ACTIVE"))
             .forEach((show) => {
@@ -106,6 +111,7 @@ export const getShows = async (req, res) => {
     }
 };
 
+// Nhóm các suất chiếu tương lai theo ngày rồi theo phim cho màn hình lịch chiếu.
 export const getShowSchedule = async (req, res) => {
     try {
         const shows = await Show.find({
@@ -162,6 +168,7 @@ export const getShowSchedule = async (req, res) => {
     }
 };
 
+// Trả chi tiết một phim cùng các suất chiếu tương lai được nhóm theo ngày.
 export const getShow = async (req, res) => {
     try {
         const { movieId } = req.params;
@@ -208,6 +215,7 @@ export const getShow = async (req, res) => {
     }
 };
 
+// Trả sơ đồ phòng và trạng thái ghế của một suất chiếu còn khả dụng.
 export const getSeatLayoutForShow = async (req, res) => {
     try {
         const { showId } = req.params;
