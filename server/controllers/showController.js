@@ -111,6 +111,44 @@ export const getShows = async (req, res) => {
     }
 };
 
+// Trả phim thuộc suất chiếu được admin tạo gần nhất để hiển thị hero trang chủ.
+export const getLatestAddedShowMovie = async (req, res) => {
+    try {
+        const recentShows = await Show.find({
+            showDateTime: { $gte: new Date() },
+            ...buildScheduledShowtimeFilter()
+        })
+            .populate("movie")
+            .populate("room")
+            .sort({ createdAt: -1 })
+            .limit(20);
+
+        const latestShow = recentShows.find((show) =>
+            show.movie && show.room && (!show.room.status || show.room.status === "ACTIVE")
+        );
+
+        if (!latestShow) {
+            return res.json({ success: true, movie: null });
+        }
+
+        const [movie] = await attachReviewSummaries([latestShow.movie]);
+
+        res.json({
+            success: true,
+            movie,
+            showtime: {
+                _id: latestShow._id,
+                showDateTime: latestShow.showDateTime,
+                roomName: latestShow.room.name,
+                basePrice: latestShow.basePrice
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: "Lỗi khi tải phim mới nhất: " + error.message });
+    }
+};
+
 // Nhóm các suất chiếu tương lai theo ngày rồi theo phim cho màn hình lịch chiếu.
 export const getShowSchedule = async (req, res) => {
     try {

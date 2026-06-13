@@ -16,8 +16,10 @@ import {
 import { getShowtimeLifecycle } from "../services/showtimeService.js";
 import { reverseWalletDebit } from "../services/walletService.js";
 
+// Client Inngest dùng để đăng ký và gửi các event chạy nền của hệ thống đặt vé.
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
 
+// Các helper format dưới đây chỉ phục vụ nội dung email, không thay đổi dữ liệu booking trong database.
 const formatEmailDateTime = (value) => (
     value
         ? new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
@@ -26,12 +28,14 @@ const formatEmailDateTime = (value) => (
 
 const formatEmailMoney = (value, currency = "VND") => `${Number(value || 0).toLocaleString("vi-VN")} ${currency}`;
 
+// Hiển thị danh sách ghế an toàn cho cả booking một ghế, nhiều ghế hoặc dữ liệu cũ thiếu bookedSeats.
 const formatBookedSeats = (booking) => (
     Array.isArray(booking?.bookedSeats) && booking.bookedSeats.length
         ? booking.bookedSeats.join(", ")
         : "Chưa có dữ liệu"
 );
 
+// Ưu tiên tên phim tiếng Việt từ show.movie, fallback về snapshot movieTitle của booking.
 const getBookingMovieTitle = (booking) => (
     booking?.show?.movie?.titleVi
     || booking?.movieTitle
@@ -39,6 +43,7 @@ const getBookingMovieTitle = (booking) => (
     || "Phim không xác định"
 );
 
+// Render block combo bắp nước trong email; trả chuỗi rỗng nếu booking không mua kèm combo.
 const renderConcessionItems = (booking) => {
     const items = booking.concessionItems || [];
 
@@ -67,6 +72,7 @@ const renderConcessionItems = (booking) => {
     `;
 };
 
+// Sinh thông báo hoàn tiền theo trạng thái hiện tại của booking.
 const getBookingRefundMessage = (booking) => {
     if (booking.paymentStatus === PAYMENT_STATUS.REFUND_FAILED) {
         return "Yêu cầu hoàn tiền chưa hoàn tất. QuickShow sẽ kiểm tra và xử lý lại trong thời gian sớm nhất.";
@@ -88,6 +94,7 @@ const getBookingRefundMessage = (booking) => {
     return "Booking này chưa phát sinh hoàn tiền.";
 };
 
+// Block tóm tắt booking dùng lại cho email hủy booking và hủy suất chiếu.
 const renderBookingSummary = (booking) => `
     <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
         <p style="margin: 0 0 10px 0;"><strong>Mã booking:</strong> ${booking.bookingCode}</p>
@@ -98,6 +105,7 @@ const renderBookingSummary = (booking) => `
     </div>
 `;
 
+// Đồng bộ user mới từ Clerk webhook vào collection User nội bộ.
 const syncUserCreation = inngest.createFunction(
     {
         id: "sync-user-from-clerk",
@@ -115,6 +123,7 @@ const syncUserCreation = inngest.createFunction(
     }
 );
 
+// Xóa user nội bộ khi Clerk báo tài khoản bị xóa.
 const syncUserDeletion = inngest.createFunction(
     {
         id: "delete-user-with-clerk",
@@ -126,6 +135,7 @@ const syncUserDeletion = inngest.createFunction(
     }
 );
 
+// Cập nhật thông tin user nội bộ khi hồ sơ Clerk thay đổi.
 const syncUserUpdation = inngest.createFunction(
     {
         id: "update-user-from-clerk",
@@ -143,6 +153,7 @@ const syncUserUpdation = inngest.createFunction(
     }
 );
 
+// Sau thời gian giữ ghế, tự hết hạn booking chưa thanh toán, hoàn ví đã trừ và nhả ghế.
 const expireUnpaidBookings = inngest.createFunction(
     {
         id: "expire-unpaid-booking",
@@ -151,6 +162,7 @@ const expireUnpaidBookings = inngest.createFunction(
     async ({ event, step }) => {
         const holdMinutes = Number(event.data.holdMinutes || PAYMENT_HOLD_MINUTES);
         const expiresAt = new Date(event.data.expiresAt || Date.now() + holdMinutes * 60 * 1000);
+        // Inngest sleep giữ job ở trạng thái chờ thay vì tự setTimeout trong server.
         await step.sleepUntil("wait-until-booking-expired", expiresAt);
 
         await step.run("expire-booking-and-release-seats", async () => {
@@ -160,6 +172,7 @@ const expireUnpaidBookings = inngest.createFunction(
                 return;
             }
 
+            // Nếu booking đã được thanh toán hoặc bị hủy bởi luồng khác thì không xử lý hết hạn nữa.
             if (booking.paymentStatus !== PAYMENT_STATUS.UNPAID || booking.bookingStatus !== BOOKING_STATUS.PENDING_PAYMENT) {
                 return;
             }
@@ -175,6 +188,7 @@ const expireUnpaidBookings = inngest.createFunction(
             await booking.save();
 
             if (booking.walletAmountUsed > 0) {
+                // Booking có thể dùng một phần ví trước khi qua cổng thanh toán, nên phải hoàn lại ví khi hết hạn.
                 await reverseWalletDebit({
                     userId: booking.user,
                     bookingId: booking._id,
@@ -192,12 +206,14 @@ const expireUnpaidBookings = inngest.createFunction(
             });
 
             if (global.io) {
+                // Báo realtime để các client đang xem sơ đồ ghế thấy ghế được mở lại.
                 global.io.to(booking.show.toString()).emit("seats_released", booking.bookedSeats);
             }
         });
     }
 );
 
+// Gửi email xác nhận sau khi booking được thanh toán thành công.
 const sendBookingConfirmationEmail = inngest.createFunction(
     {
         id: "send-booking-confirmation-email",
@@ -205,6 +221,7 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     },
     async ({ event, step }) => {
         await step.run("fetch-booking-and-send-email", async () => {
+            // Claim bằng confirmationEmailSentAt để tránh gửi trùng khi webhook và user-return cùng phát event.
             const booking = await Booking.findOneAndUpdate(
                 {
                     _id: event.data.bookingId,
@@ -223,6 +240,7 @@ const sendBookingConfirmationEmail = inngest.createFunction(
             }
 
             try {
+                // QR check-in được đính kèm bằng CID để email hiển thị trực tiếp trong nội dung.
                 const qrToken = createCheckInQrToken(booking);
                 const qrImage = await QRCode.toBuffer(qrToken, {
                     type: "png",
@@ -261,6 +279,7 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                     }]
                 });
             } catch (error) {
+                // Mở khóa lại để Inngest retry nếu tạo QR hoặc gửi email thất bại.
                 await Booking.updateOne(
                     { _id: booking._id },
                     { $set: { confirmationEmailSentAt: null } }
@@ -271,6 +290,7 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     }
 );
 
+// Gửi email khi một booking cụ thể bị người dùng hoặc admin hủy.
 const sendBookingCancellationEmail = inngest.createFunction(
     {
         id: "send-booking-cancellation-email",
@@ -292,6 +312,7 @@ const sendBookingCancellationEmail = inngest.createFunction(
                 : "bởi quản trị viên QuickShow";
             const reason = event.data.reason || booking.cancelReason || "Không có lý do cụ thể.";
 
+            // Email dùng trạng thái refund hiện tại của booking sau khi service hủy/hoàn tiền đã xử lý.
             await sendEmail({
                 to: booking.user.email,
                 subject: `Thông báo hủy booking: ${booking.bookingCode}`,
@@ -314,6 +335,7 @@ const sendBookingCancellationEmail = inngest.createFunction(
     }
 );
 
+// Gửi email cho từng booking bị ảnh hưởng khi admin hủy cả suất chiếu.
 const sendShowtimeCancellationEmail = inngest.createFunction(
     {
         id: "send-showtime-cancellation-email",
@@ -353,6 +375,7 @@ const sendShowtimeCancellationEmail = inngest.createFunction(
     }
 );
 
+// Mỗi giờ quét các booking sắp chiếu trong khoảng mục tiêu và gửi email nhắc lịch.
 const sendShowReminders = inngest.createFunction(
     {
         id: "send-show-reminders",
@@ -360,6 +383,7 @@ const sendShowReminders = inngest.createFunction(
     },
     async ({ step }) => {
         const now = new Date();
+        // Window 7-8 giờ tới: cron chạy hằng giờ nên mỗi booking chỉ rơi vào một cửa sổ nhắc lịch.
         const windowEnd = new Date(now.getTime() + 8 * 60 * 60 * 1000);
         const windowStart = new Date(windowEnd.getTime() - 60 * 60 * 1000);
 
@@ -377,6 +401,7 @@ const sendShowReminders = inngest.createFunction(
             return { sent: 0, failed: 0 };
         }
 
+        // Promise.allSettled giúp một email lỗi không làm hỏng toàn bộ batch nhắc lịch.
         const results = await step.run("send-reminder-mails", async () => Promise.allSettled(
             bookings
                 .filter((booking) => booking.user?.email)
@@ -403,6 +428,7 @@ const sendShowReminders = inngest.createFunction(
     }
 );
 
+// Mỗi giờ đánh dấu NO_SHOW cho booking đã thanh toán nhưng suất chiếu đã kết thúc và chưa check-in.
 const markNoShowBookings = inngest.createFunction(
     {
         id: "mark-no-show-bookings",
@@ -438,6 +464,7 @@ const markNoShowBookings = inngest.createFunction(
     }
 );
 
+// Gửi email marketing khi admin thêm lịch chiếu mới cho một phim.
 const sendNewShowNotifications = inngest.createFunction(
     {
         id: "send-new-show-notifications",
@@ -452,6 +479,7 @@ const sendNewShowNotifications = inngest.createFunction(
             return { sent: 0 };
         }
 
+        // Lỗi gửi cho một user chỉ được log, không chặn các user còn lại.
         await step.run("send-show-notification-mails", async () => {
             for (const user of users) {
                 try {
@@ -477,6 +505,7 @@ const sendNewShowNotifications = inngest.createFunction(
     }
 );
 
+// Danh sách function được mount ở /api/inngest trong server.js.
 export const functions = [
     syncUserCreation,
     syncUserDeletion,
