@@ -26,6 +26,19 @@ const formatEmailDateTime = (value) => (
 
 const formatEmailMoney = (value, currency = "VND") => `${Number(value || 0).toLocaleString("vi-VN")} ${currency}`;
 
+const formatBookedSeats = (booking) => (
+    Array.isArray(booking?.bookedSeats) && booking.bookedSeats.length
+        ? booking.bookedSeats.join(", ")
+        : "Chưa có dữ liệu"
+);
+
+const getBookingMovieTitle = (booking) => (
+    booking?.show?.movie?.titleVi
+    || booking?.movieTitle
+    || booking?.show?.movie?.title
+    || "Phim không xác định"
+);
+
 const renderConcessionItems = (booking) => {
     const items = booking.concessionItems || [];
 
@@ -78,10 +91,10 @@ const getBookingRefundMessage = (booking) => {
 const renderBookingSummary = (booking) => `
     <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
         <p style="margin: 0 0 10px 0;"><strong>Mã booking:</strong> ${booking.bookingCode}</p>
-        <p style="margin: 0 0 10px 0;"><strong>Phim:</strong> ${booking.movieTitle}</p>
+        <p style="margin: 0 0 10px 0;"><strong>Phim:</strong> ${getBookingMovieTitle(booking)}</p>
         <p style="margin: 0 0 10px 0;"><strong>Phòng chiếu:</strong> ${booking.roomName}</p>
         <p style="margin: 0 0 10px 0;"><strong>Ngày giờ chiếu:</strong> ${formatEmailDateTime(booking.showDateTime)}</p>
-        <p style="margin: 0;"><strong>Ghế:</strong> ${(booking.bookedSeats || []).join(", ")}</p>
+        <p style="margin: 0;"><strong>Ghế:</strong> ${formatBookedSeats(booking)}</p>
     </div>
 `;
 
@@ -201,49 +214,59 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                     $set: { confirmationEmailSentAt: new Date() }
                 },
                 { new: true }
-            ).populate("user");
+            )
+                .populate("user")
+                .populate({ path: "show", populate: { path: "movie" } });
 
             if (!booking || !booking.user) {
                 return;
             }
 
-            const qrToken = createCheckInQrToken(booking);
-            const qrImage = await QRCode.toBuffer(qrToken, {
-                type: "png",
-                width: 260,
-                margin: 1,
-                errorCorrectionLevel: "M"
-            });
+            try {
+                const qrToken = createCheckInQrToken(booking);
+                const qrImage = await QRCode.toBuffer(qrToken, {
+                    type: "png",
+                    width: 260,
+                    margin: 1,
+                    errorCorrectionLevel: "M"
+                });
 
-            await sendEmail({
-                to: booking.user.email,
-                subject: `Xác nhận đặt vé thành công: ${booking.movieTitle}`,
-                body: `
-                    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
-                        <h2>Xin chào ${booking.user.name},</h2>
-                        <p>Booking <strong>${booking.bookingCode}</strong> cho phim <strong style="color: #F84565;">${booking.movieTitle}</strong> đã được thanh toán thành công.</p>
-                        <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                            <p style="margin: 0 0 10px 0;"><strong>Phòng chiếu:</strong> ${booking.roomName}</p>
-                            <p style="margin: 0 0 10px 0;"><strong>Ngày giờ chiếu:</strong> ${new Date(booking.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>
-                            <p style="margin: 0;"><strong>Ghế:</strong> ${booking.bookedSeats.join(", ")}</p>
+                await sendEmail({
+                    to: booking.user.email,
+                    subject: `Xác nhận đặt vé thành công: ${getBookingMovieTitle(booking)}`,
+                    body: `
+                        <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
+                            <h2>Xin chào ${booking.user.name},</h2>
+                            <p>Booking <strong>${booking.bookingCode}</strong> cho phim <strong style="color: #F84565;">${getBookingMovieTitle(booking)}</strong> đã được thanh toán thành công.</p>
+                            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                                <p style="margin: 0 0 10px 0;"><strong>Phòng chiếu:</strong> ${booking.roomName}</p>
+                                <p style="margin: 0 0 10px 0;"><strong>Ngày giờ chiếu:</strong> ${new Date(booking.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>
+                                <p style="margin: 0;"><strong>Ghế:</strong> ${formatBookedSeats(booking)}</p>
+                            </div>
+                            ${renderConcessionItems(booking)}
+                            <p><strong>Tổng thanh toán:</strong> ${formatEmailMoney(booking.amount, booking.currency)}</p>
+                            <div style="margin: 20px 0; text-align: center;">
+                                <p style="margin: 0 0 12px 0; font-weight: 700;">QR check-in</p>
+                                <img src="cid:booking-check-in-qr" alt="QR check-in ${booking.bookingCode}" width="220" height="220" style="display: inline-block; border: 1px solid #eee; border-radius: 12px; padding: 10px; background: #fff;" />
+                                <p style="margin: 12px 0 0 0; color: #666; font-size: 13px;">Đưa QR này cho nhân viên rạp quét khi đến check-in.</p>
+                            </div>
+                            <p>Vui lòng giữ lại mã booking <strong>${booking.bookingCode}</strong> hoặc QR code để check-in tại rạp.</p>
+                            <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
                         </div>
-                        ${renderConcessionItems(booking)}
-                        <p><strong>Tổng thanh toán:</strong> ${formatEmailMoney(booking.amount, booking.currency)}</p>
-                        <div style="margin: 20px 0; text-align: center;">
-                            <p style="margin: 0 0 12px 0; font-weight: 700;">QR check-in</p>
-                            <img src="cid:booking-check-in-qr" alt="QR check-in ${booking.bookingCode}" width="220" height="220" style="display: inline-block; border: 1px solid #eee; border-radius: 12px; padding: 10px; background: #fff;" />
-                            <p style="margin: 12px 0 0 0; color: #666; font-size: 13px;">Đưa QR này cho nhân viên rạp quét khi đến check-in.</p>
-                        </div>
-                        <p>Vui lòng giữ lại mã booking <strong>${booking.bookingCode}</strong> hoặc QR code để check-in tại rạp.</p>
-                        <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
-                    </div>
-                `,
-                attachments: [{
-                    filename: `quickshow-${booking.bookingCode}-qr.png`,
-                    content: qrImage,
-                    cid: "booking-check-in-qr"
-                }]
-            });
+                    `,
+                    attachments: [{
+                        filename: `quickshow-${booking.bookingCode}-qr.png`,
+                        content: qrImage,
+                        cid: "booking-check-in-qr"
+                    }]
+                });
+            } catch (error) {
+                await Booking.updateOne(
+                    { _id: booking._id },
+                    { $set: { confirmationEmailSentAt: null } }
+                );
+                throw error;
+            }
         });
     }
 );
@@ -255,7 +278,9 @@ const sendBookingCancellationEmail = inngest.createFunction(
     },
     async ({ event, step }) => {
         await step.run("fetch-booking-and-send-cancellation-email", async () => {
-            const booking = await Booking.findById(event.data.bookingId).populate("user");
+            const booking = await Booking.findById(event.data.bookingId)
+                .populate("user")
+                .populate({ path: "show", populate: { path: "movie" } });
 
             if (!booking || !booking.user?.email) {
                 return;
@@ -296,7 +321,9 @@ const sendShowtimeCancellationEmail = inngest.createFunction(
     },
     async ({ event, step }) => {
         await step.run("fetch-booking-and-send-showtime-cancellation-email", async () => {
-            const booking = await Booking.findById(event.data.bookingId).populate("user");
+            const booking = await Booking.findById(event.data.bookingId)
+                .populate("user")
+                .populate({ path: "show", populate: { path: "movie" } });
 
             if (!booking || !booking.user?.email) {
                 return;
@@ -306,11 +333,11 @@ const sendShowtimeCancellationEmail = inngest.createFunction(
 
             await sendEmail({
                 to: booking.user.email,
-                subject: `Suất chiếu đã bị hủy: ${booking.movieTitle}`,
+                subject: `Suất chiếu đã bị hủy: ${getBookingMovieTitle(booking)}`,
                 body: `
                     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #333;">
                         <h2>Xin chào ${booking.user.name},</h2>
-                        <p>QuickShow rất tiếc phải thông báo suất chiếu của phim <strong style="color: #F84565;">${booking.movieTitle}</strong> đã bị hủy.</p>
+                        <p>QuickShow rất tiếc phải thông báo suất chiếu của phim <strong style="color: #F84565;">${getBookingMovieTitle(booking)}</strong> đã bị hủy.</p>
                         ${renderBookingSummary(booking)}
                         ${renderConcessionItems(booking)}
                         <div style="background-color: #fff6e5; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f1c56c;">
@@ -341,7 +368,9 @@ const sendShowReminders = inngest.createFunction(
                 bookingStatus: BOOKING_STATUS.CONFIRMED,
                 paymentStatus: PAYMENT_STATUS.PAID,
                 showDateTime: { $gte: windowStart, $lte: windowEnd }
-            }).populate("user")
+            })
+                .populate("user")
+                .populate({ path: "show", populate: { path: "movie" } })
         ));
 
         if (!bookings.length) {
@@ -353,13 +382,13 @@ const sendShowReminders = inngest.createFunction(
                 .filter((booking) => booking.user?.email)
                 .map((booking) => sendEmail({
                     to: booking.user.email,
-                    subject: `Nhắc lịch xem phim: ${booking.movieTitle}`,
+                    subject: `Nhắc lịch xem phim: ${getBookingMovieTitle(booking)}`,
                     body: `
                         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                             <h2>Xin chào ${booking.user.name},</h2>
                             <p>Đây là email nhắc lịch cho booking <strong>${booking.bookingCode}</strong>.</p>
-                            <p>Phim <strong style="color: #F84565;">${booking.movieTitle}</strong> sẽ bắt đầu lúc <strong>${new Date(booking.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</strong>.</p>
-                            <p>Ghế của bạn: <strong>${booking.bookedSeats.join(", ")}</strong>.</p>
+                            <p>Phim <strong style="color: #F84565;">${getBookingMovieTitle(booking)}</strong> sẽ bắt đầu lúc <strong>${new Date(booking.showDateTime).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</strong>.</p>
+                            <p>Ghế của bạn: <strong>${formatBookedSeats(booking)}</strong>.</p>
                             <p>Vui lòng đến rạp sớm để check-in thuận tiện.</p>
                             <p>Trân trọng,<br/><strong>Đội ngũ QuickShow</strong></p>
                         </div>

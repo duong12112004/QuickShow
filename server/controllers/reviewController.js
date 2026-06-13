@@ -18,7 +18,7 @@ const ensureAuthenticatedUser = (req) => {
     return userId;
 };
 
-// Chuẩn hóa nội dung bình luận trước khi lưu hoặc tìm kiếm.
+// Chuẩn hóa nội dung bình luận trước khi lưu .
 const normalizeComment = (value) => `${value || ""}`.trim();
 
 // Chỉ chấp nhận điểm nguyên trong thang 1-10.

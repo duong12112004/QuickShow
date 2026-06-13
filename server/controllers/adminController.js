@@ -1029,7 +1029,7 @@ export const createShowtime = async (req, res) => {
 
         await inngest.send({
             name: "app/show.added",
-            data: { movieTitle: movie.title }
+            data: { movieTitle: movie.titleVi || movie.title }
         });
 
         res.json({

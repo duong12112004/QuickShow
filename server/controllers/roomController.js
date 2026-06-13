@@ -17,7 +17,7 @@ export const seedCinemaData = async (req, res) => {
         if (totalShowsCount > 0) {
             return res.json({
                 success: false,
-                message: "Không thể seed lại phòng chiếu khi hệ thống đã có suất chiếu. Hãy dùng trên môi trường dev sạch."
+                message: "Không thể seed lại phòng chiếu khi hệ thống đã có suất chiếu."
             });
         }
 

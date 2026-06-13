@@ -311,7 +311,7 @@ export const buildBookingSnapshot = async ({
         user: userId,
         show: showData._id,
         roomName: showData.room.name,
-        movieTitle: showData.movie.title,
+        movieTitle: showData.movie.titleVi || showData.movie.title,
         showDateTime: showData.showDateTime,
         bookedSeats: selectedSeats,
         seatDetails,

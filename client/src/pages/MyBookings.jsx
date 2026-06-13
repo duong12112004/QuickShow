@@ -44,6 +44,13 @@ const initialReviewForm = {
   hasSpoiler: false
 };
 
+const getBookingMovieTitle = (booking) => (
+  booking?.show?.movie?.titleVi
+  || booking?.movieTitle
+  || booking?.show?.movie?.title
+  || 'Phim không xác định'
+);
+
 const MyBookings = () => {
   const { axios, getToken, user, image_base_url, fetchWallet, fetchShows } = useAppContext();
   const currency = import.meta.env.VITE_CURRENCY;
@@ -224,7 +231,7 @@ const MyBookings = () => {
 
       const haystack = [
         booking.bookingCode,
-        booking.movieTitle || booking.show?.movie?.title,
+        getBookingMovieTitle(booking),
         booking.roomName || booking.show?.room?.name,
         booking.bookedSeats?.join(' ')
       ]
@@ -265,7 +272,7 @@ const MyBookings = () => {
     return <Loading />;
   }
 
-  const reviewMovieTitle = reviewTarget?.movieTitle || reviewTarget?.show?.movie?.title || 'Phim không xác định';
+  const reviewMovieTitle = getBookingMovieTitle(reviewTarget);
   const reviewPosterPath = reviewTarget?.show?.movie?.poster_path || reviewTarget?.show?.poster_path;
   const reviewShowDateTime = reviewTarget?.showDateTime || reviewTarget?.show?.showDateTime;
   const isSubmittingReview = processingId === reviewTarget?._id;
@@ -354,7 +361,7 @@ const MyBookings = () => {
 
         <div className='space-y-5 pb-10'>
           {paginatedBookings.map((item) => {
-            const movieTitle = item.movieTitle || item.show?.movie?.title || 'Phim không xác định';
+            const movieTitle = getBookingMovieTitle(item);
             const roomName = item.roomName || item.show?.room?.name || 'Chưa có dữ liệu';
             const showDateTime = item.showDateTime || item.show?.showDateTime;
             const bookingStatus = getBookingStatusUi(item.bookingStatus);
@@ -601,7 +608,7 @@ const MyBookings = () => {
               </div>
 
               <div className='mt-5 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-gray-300 sm:grid-cols-2'>
-                <p><span className='text-gray-500'>Phim:</span> {cancelTarget.movieTitle || cancelTarget.show?.movie?.titleVi || cancelTarget.show?.movie?.title || 'Chưa có dữ liệu'}</p>
+                <p><span className='text-gray-500'>Phim:</span> {getBookingMovieTitle(cancelTarget)}</p>
                 <p><span className='text-gray-500'>Tổng tiền:</span> {(cancelTarget.amount || 0).toLocaleString('vi-VN')} {currency}</p>
                 <p><span className='text-gray-500'>Phòng:</span> {cancelTarget.roomName || cancelTarget.show?.room?.name || 'Chưa có dữ liệu'}</p>
                 <p><span className='text-gray-500'>Ghế:</span> {cancelTarget.bookedSeats?.join(', ') || 'Chưa có dữ liệu'}</p>
@@ -778,7 +785,7 @@ const MyBookings = () => {
                 <div>
                   <p className='text-xs font-medium uppercase tracking-[0.22em] text-primary/80'>QR check-in</p>
                   <h2 className='mt-2 line-clamp-2 text-xl font-semibold text-white'>
-                    {qrTarget.movieTitle || qrTarget.show?.movie?.title || 'Booking'}
+                    {getBookingMovieTitle(qrTarget)}
                   </h2>
                   <p className='mt-1 text-sm text-gray-400'>{qrTarget.bookingCode}</p>
                 </div>
