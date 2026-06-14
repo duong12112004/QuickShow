@@ -479,8 +479,9 @@ const sendNewShowNotifications = inngest.createFunction(
             return { sent: 0 };
         }
 
-        // Lỗi gửi cho một user chỉ được log, không chặn các user còn lại.
-        await step.run("send-show-notification-mails", async () => {
+        const results = await step.run("send-show-notification-mails", async () => {
+            const sendResults = [];
+
             for (const user of users) {
                 try {
                     await sendEmail({
@@ -495,13 +496,24 @@ const sendNewShowNotifications = inngest.createFunction(
                             </div>
                         `
                     });
+                    sendResults.push({ email: user.email, status: "sent" });
                 } catch (error) {
                     console.error(`[Inngest] Lỗi gửi email thông báo phim mới cho ${user.email}:`, error.message);
+                    sendResults.push({ email: user.email, status: "failed", error: error.message });
                 }
             }
+
+            return sendResults;
         });
 
-        return { sent: users.length };
+        const sent = results.filter((item) => item.status === "sent").length;
+        const failed = results.length - sent;
+
+        if (sent === 0 && failed > 0) {
+            throw new Error(`Failed to send new show notifications to all ${failed} users.`);
+        }
+
+        return { sent, failed };
     }
 );
 
