@@ -217,6 +217,7 @@ const expireUnpaidBookings = inngest.createFunction(
 const sendBookingConfirmationEmail = inngest.createFunction(
     {
         id: "send-booking-confirmation-email",
+        idempotency: "event.data.bookingId",
         triggers: { event: "app/show.booked" }
     },
     async ({ event, step }) => {
